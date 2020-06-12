@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\GR.Crm.Organizations\GR.Crm.Organizations.Abstractions\GR.Crm.Organizations.Abstractions.csproj" />
+    <ProjectReference Include="..\..\GR.Crm.PipeLines\GR.Crm.PipeLines.Abstractions\GR.Crm.PipeLines.Abstractions.csproj" />
+    <ProjectReference Include="..\..\GR.Crm.Teams\GR.Crm.Teams.Abstractions\GR.Crm.Teams.Abstractions.csproj" />
+  </ItemGroup>
+
+
+
+  <ItemGroup>
+    <None Remove="SystemLeadState.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration\SystemLeadState.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+
+    <Content Include="Configuration\SystemLeadState.json">
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

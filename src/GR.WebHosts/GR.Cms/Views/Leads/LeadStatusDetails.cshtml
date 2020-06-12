@@ -1,0 +1,47 @@
+@using GR.Core.Extensions;
+@using GR.Crm.Leads.Abstractions.Models;
+@model LeadState
+@{
+	ViewData["Title"] = Model.Name;
+}
+
+<div class="col-lg-6 bg-white border rounded py-15 px-20 ml-40px">
+	<h6>@Localizer["details_overview"]</h6>
+	<hr class="hr-description">
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["system_details_name"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black"><span class="badge badge-@Model.StateStyleClass">@Model.Name</span></p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["system_status"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">
+				@if (Model.IsDeleted)
+				{
+					<span>
+						Inactive
+					</span>
+				}
+				else
+				{
+					<span>
+						Active
+					</span>
+				}
+			</p>
+		</div>
+	</div>
+	<h6 class="mt-3">@Localizer["details_description"]</h6>
+	<hr class="hr-description">
+	<div class="row no-gutters">
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Description</p>
+		</div>
+	</div>
+</div>

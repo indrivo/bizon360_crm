@@ -1,0 +1,497 @@
+@{
+	ViewData["Title"] = "Contacts";
+}
+@section Styles
+{
+}
+
+<Contacts />
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('Contacts', {
+			template: `
+					<div>
+						<PageOptionsBar :searcheable="true" :pageOptionsComponents="pageOptionsComponents" @@searchInput="searchTable"/>
+						<div>
+							<Table
+								:fields="tableFields"
+								:apiUrl="apiUrl"
+								:httpMethod="httpMethod"
+								@@triggeredMenuAction="action"
+								tableId="contacts-table"
+								:sortOrder="tableConfig.sortCol"
+								:customQueryparams="customQueryparams"
+								:hasCustomQUeryparams="true"
+								:initialPageSize="20"
+								:reload="tableKey"
+								dataPath="result.result"
+								:actionsSingle="tableActions.single"
+								:actionsSingleDisabled="tableActions.singleDisabled"
+								:actionsMultiple="tableActions.multiple"
+								:actionsMultipleDisabled="tableActions.multipleDisabled"
+								:haveContextMenu="true"
+							>
+								<slot slot="firstName" slot-scope="props">
+									<a :href="'/contact/details?id=' + props.rowData.id" @@click.stop>
+										{{ props.rowData.firstName }} {{ props.rowData.lastName }}
+									</a>
+								</slot>
+								<slot slot="organization" slot-scope="props">
+									<a v-if="props.rowData.organizationId" :href="'/organizations/details?id=' + props.rowData.organizationId" target="_blank" @@click.stop>
+										{{ props.rowData.organization }}
+									</a>
+								</slot>
+								<slot slot="phone" slot-scope="props">
+									<span v-if="props.rowData.phone">+373 {{ props.rowData.phone }}</span>
+								</slot>
+							</Table>
+						</div>
+						<Modal :refreshInputs="refreshInputs" :modalProps="modalContactProps" @@newValue="emitValueContact" :inputsKey="modalKey"/>
+					</div>`
+			,
+			data() {
+				return {
+					apiUrl: apiEndpoints.Contact.GetAllContactsPaginated,
+					httpMethod: 'get',
+					tableFields: [
+						{
+							name: 'firstName',
+							title: 'Name',
+							sortField: 'firstName',
+							visible: true
+						},
+						{
+							name: 'email',
+							title: 'Email',
+							sortField: 'email',
+							visible: true
+						},
+						{
+							name: 'phone',
+							title: 'Phone',
+							sortField: 'phone',
+							visible: true
+						},
+						{
+							name: 'jobPosition',
+							title: `Job position`,
+							sortField: 'jobPosition',
+							visible: true
+						},
+						{
+							name: 'organization',
+							title: 'Organization',
+							sortField: 'organization',
+							visible: true
+						},
+						{
+							name: 'isDeleted',
+							title: 'Status',
+							sortField: 'isDeleted',
+							visible: true
+						}
+					],
+					organizationsListSelect: [],
+					jobPositionsListSelect: [],
+					orgId: null,
+					searchString: '',
+					editContactId: '',
+					contactValues: {
+						organizationId: '',
+						email: '',
+						phone: '',
+						firstName: '',
+						lastName: '',
+						description: '',
+						jobPositionId: '',
+					},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add contact',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableContactModal = false;
+									this.resetContactModalValues();
+									this.refreshInputs++;
+									this.modalKey++;
+									$(`#${this.modalContactProps.id}`).modal("show");
+								}
+							}
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'firstName',
+								sortField: 'firstName',
+								direction: 'asc'
+							}
+						]
+					},
+					tableActions: {
+						single: {
+							"details": { name: "Details", icon: "details" },
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					addAndNew: false,
+					waitAddButton: false,
+					editableContactModal: false,
+					refreshInputs: 0,
+					modalKey: 0
+				};
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						'includeDeleted': true,
+						'gSearch': this.searchString
+					}
+				},
+				modalContactLabel() {
+					return this.editableContactModal ? t('contacts_edit_contact') : t('contacts_add_contact');
+				},
+				contactFormSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalContactProps.id}`).modal("hide");
+								}
+							}
+						}
+					];
+					if (!this.editableContactModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.addAndNew = false;
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add & new',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.addAndNew = true;
+									}
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalContactProps() {
+					return {
+						id: 'contactModal',
+						label: this.modalContactLabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-firstName',
+									type: 'text',
+									label: 'First name',
+									required: true,
+									className: 'col-12 col-md-6',
+									value: this.contactValues.firstName,
+									validator: value => fieldValidationFunc(value, 'nameLetters'),
+									validatorInput: value => fieldValidationInputFunc(value, 'nameLetters')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-lastName',
+									type: 'text',
+									label: 'Last name',
+									required: true,
+									className: 'col-12 col-md-6',
+									value: this.contactValues.lastName,
+									validator: value => fieldValidationFunc(value, 'nameLetters'),
+									validatorInput: value => fieldValidationInputFunc(value, 'nameLetters')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'contact-organizationId',
+									label: 'Organization',
+									required: true,
+									searchable: true,
+									options: this.organizationsListSelect,
+									value: this.contactValues.organizationId,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-email',
+									type: 'email',
+									label: 'Email',
+									required: true,
+									className: 'col-12 col-md-6',
+									value: this.contactValues.email,
+									validator: value => fieldValidationFunc(value, 'email')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-phone',
+									type: 'tel',
+									label: 'Phone',
+									required: true,
+									inputPrefix: '(+373)',
+									className: 'col-12 col-md-6',
+									value: this.contactValues.phone,
+									validator: value => fieldValidationFunc(value, 'phone'),
+									validatorInput: value => fieldValidationInputFunc(value, 'phone')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'contact-jobPositionId',
+									label: 'Job position',
+									options: this.jobPositionsListSelect,
+									value: this.contactValues.jobPositionId,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'contact-description',
+									label: 'Description',
+									className: 'col-12',
+									value: this.contactValues.description,
+								}
+							}
+						],
+						formSubmits: this.contactFormSubmits,
+						onSubmit: () => {
+							if (!this.editableContactModal) {
+								this.addNewContact().then(() => {
+									if (!this.addAndNew) {
+										$(`#${this.modalContactProps.id}`).modal("hide");
+									} else {
+										this.resetContactModalValues();
+										this.refreshInputs++;
+									}
+								});
+							} else {
+								this.updateContact().then(() => {
+									$(`#${this.modalContactProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+			},
+			created: async function () {
+				customAjaxRequest(apiEndpoints.Address.GetAllCountries).then(result => {
+					this.countries = this.convertToSelectList(result);
+				});
+				customAjaxRequest(apiEndpoints.Organization.GetAllOrganization).then(result => {
+					this.organizationsListSelect = this.convertToSelectList(result);
+				});
+				customAjaxRequest(apiEndpoints.JobPosition.GetAllJobPositions).then(result => {
+					this.jobPositionsListSelect = this.convertToSelectList(result);
+				});
+			},
+			methods: {
+				async addNewContact() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contact.AddNewContact, 'PUT', this.contactValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateContact() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contact.UpdateContact, 'POST', this.contactValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateContacts(array) {
+					array.forEach((contactId, i, a) => {
+						customAjaxRequest(apiEndpoints.Contact.DeactivateContactById, 'POST', { contactId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateContacts(array) {
+					array.forEach((contactId, i, a) => {
+						customAjaxRequest(apiEndpoints.Contact.ActivateContactById, 'POST', { contactId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteContacts(array) {
+					array.forEach((contactId, i, a) => {
+						customAjaxRequest(apiEndpoints.Contact.DeleteContactById, 'DELETE', { contactId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadContact(contactId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contact.GetContactById, 'GET', { contactId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				editContact(contactId) {
+					this.loadContact(contactId).then(result => {
+						this.editableContactModal = true;
+						this.contactValues = result;
+						this.editContactId = contactId;
+						this.modalKey++;
+						this.refreshInputs++;
+						$(`#${this.modalContactProps.id}`).modal("show");
+					});
+				},
+				resetContactModalValues() {
+					this.contactValues = {
+						organizationId: '',
+						email: '',
+						phone: '',
+						firstName: '',
+						lastName: '',
+						description: '',
+						jobPositionId: ''
+					}
+					this.editOrgId = '';
+				},
+				emitValueContact(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.contactValues[val.id.replace('contact-', '')] = newVal;
+					if (val.id == 'contact-organizationId') {
+						this.newOrgId == newVal;
+					}
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateContacts(action.value);
+							break;
+						} case 'activate': {
+							this.activateContacts(action.value);
+							break;
+						} case 'edit': {
+							this.editContact(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteContacts(action.value);
+							break;
+						} case 'details': {
+							window.location.href = '/contact/details?id=' + action.value[0];
+							break;
+						}
+					}
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				}
+			}
+		});
+
+	</script>
+}

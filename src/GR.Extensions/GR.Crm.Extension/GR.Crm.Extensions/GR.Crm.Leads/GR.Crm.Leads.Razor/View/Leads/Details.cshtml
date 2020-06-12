@@ -1,0 +1,14 @@
+﻿@using GR.Core.Extensions;
+@using GR.Crm.Leads.Abstractions.Models;
+@model Lead
+
+@{
+    ViewData["Title"] = Model.Name;
+}
+
+@section Scripts {
+    <script>
+    const leadObject = JSON.parse(`@Html.Raw(Model.SerializeAsJson())`);
+    console.log(leadObject);
+    </script>
+}

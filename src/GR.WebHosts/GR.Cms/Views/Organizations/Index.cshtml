@@ -1,0 +1,1271 @@
+@{
+	ViewData["Title"] = "Organizations";
+}
+
+<Organizations />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/listing.js"></script>
+	<script src="~/themes/gear/js/ckeditor4-vue/dist/ckeditor.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('Organizations', {
+			template: `
+				<div>
+					<div v-show="!showFilters" class="page-loader"><Loader/></div>
+					<PageOptionsBar
+						v-if="showFilters"
+						:searcheable="true"
+						:pageOptionsComponents="pageOptionsComponents"
+						@@searchInput="searchTable"
+						:filters="tableFilters"
+						@@filterResult="filterResult"
+					/>
+					<OrgTable :tableKey="tableKey" @@action="action" :searchString="searchString" :customQueryparams="customQueryparams"/>
+					<Modal :modalProps="modalOrgProps" @@newValue="emitValueOrg" @@resetValue="resetValue" :refreshInputs="refreshInputs" :inputsKey="modalOrgKey"/>
+					<Modal :modalProps="modalContactProps" @@newValue="emitValueContact" :refreshInputs="refreshInputs" :inputsKey="modalContactKey"/>
+					<Modal :modalProps="modalChangeType" @@newValue="emitValueOrgType" :refreshInputs="refreshInputs" :inputsKey="modalTypeKey"/>
+					<Modal :modalProps="modalAddressProps" @@newValue="emitValueAddress" :refreshInputs="refreshInputs" :inputsKey="modalAddressKey">
+						<slot slot="cityId" slot-scope="props">
+							{{ props.rowData.city ? props.rowData.city.name: ''}}
+						</slot>
+						<slot slot="regionId" slot-scope="props">
+							{{ props.rowData.city ? getRegionName(props.rowData.city.regionId) : ''}}
+						</slot>
+					</Modal>
+				</div>`
+			,
+			data() {
+				return {
+					modalOrgKey: 0,
+					modalContactKey: 0,
+					modalTypeKey: 0,
+					modalAddressKey: 0,
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add organization',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableOrgModal = false;
+									this.resetOrgModalValues();
+									this.resetOrgAddressValues();
+									this.refreshInputs++;
+									this.orgAddresses = [];
+									this.cities = [];
+									this.modalOrgKey++;
+									this.modalOrgKey++;
+									$(`#${this.modalOrgProps.id}`).modal("show");
+								}
+							}
+						}
+					],
+					listIndustry: [],
+					regions: [],
+					cities: [],
+					organizationsListSelect: [],
+					orgValues: {},
+					orgAddress: {},
+					editOrgId: null,
+					contacts: [],
+					newOrgId: null,
+					newContactValues: {
+						organizationId: '',
+						email: '',
+						phone: '',
+						firstName: '',
+						lastName: '',
+						description: ''
+					},
+					tableKey: 0,
+					pageRequestFilters: [],
+					modalKey: 0,
+					refreshInputs: 0,
+					showFilters: false,
+					waitAddressButton: false,
+					editableOrgModal: false,
+					orgAddresses: [],
+					searchString: '',
+					orgColumns: [
+						{
+							name: 'Region',
+							id: 'address-regionId'
+						},
+						{
+							name: 'City',
+							id: 'address-cityId'
+						},
+						{
+							name: 'Street',
+							id: 'address-street'
+						},
+						{
+							name: 'ZIP',
+							id: 'address-zip'
+						}
+					]
+				};
+			},
+			computed: {
+				selectedRegion() {
+					return this.regions[0] ? this.regions[0].value : '';
+				},
+				modalContactProps() {
+					return {
+						id: 'addcontacts',
+						label: 'Add contact',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-firstName',
+									type: 'text',
+									label: 'First name',
+									required: true,
+									value: this.newContactValues.firstName,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'varChar128'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar128')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-lastName',
+									type: 'text',
+									label: 'Last name',
+									required: true,
+									value: this.newContactValues.lastName,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'contact-organizationId',
+									label: 'Organization',
+									required: true,
+									disabled: true,
+									options: this.organizationsListSelect,
+									value: this.newOrgId,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-email',
+									type: 'email',
+									label: 'Email',
+									required: true,
+									className: 'col-12 col-md-6',
+									value: this.newContactValues.email,
+									validator: value => fieldValidationFunc(value, 'email'),
+									validatorInput: value => fieldValidationInputFunc(value, 'email')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-phone',
+									type: 'tel',
+									label: 'Phone',
+									required: true,
+									inputPrefix: '(+373)',
+									className: 'col-12 col-md-6',
+									value: this.newContactValues.phone,
+									validator: value => fieldValidationFunc(value, 'phone'),
+									validatorInput: value => fieldValidationInputFunc(value, 'phone')
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'contact-description',
+									label: 'Description',
+									value: this.newContactValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										if (this.editableOrgModal) {
+											$(`#${this.modalStageProps.id}`).modal("hide");
+										} else {
+											this.openWarningWindow();
+										}
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onMouseDown: () => {
+										this.editableOrgModal = true;
+									}
+								}
+							}
+						],
+						onSubmit: () => {
+							this.addNewContact().then(() => {
+								$(`#${this.modalContactProps.id}`).modal("hide");
+							});
+						},
+						onHide: e => {
+							if (!this.editableOrgModal) {
+								this.openWarningWindow();
+								e.preventDefault();
+								e.stopImmediatePropagation();
+								return false;
+							} else {
+								setTimeout(function(){ $('.modal-backdrop').remove(); }, 1000);
+							}
+						}
+					}
+				},
+				orgFormSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalOrgProps.id}`).modal("hide");
+								}
+							}
+						}];
+					if (!this.editableOrgModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit'
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit'
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalOrglabel() {
+					return this.editableOrgModal ? t('org_edit_organization') : t('org_add_organization');
+				},
+				modalOrgProps() {
+					return {
+						id: 'organizationModal',
+						modalSize: 'lg',
+						label: this.modalOrglabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'company-name',
+									type: 'text',
+									label: 'Organization name',
+									required: true,
+									value: this.orgValues.name,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'varChar128'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar128')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-fiscalCode',
+									label: 'Fiscal code',
+									type: 'text',
+									value: this.orgValues.fiscalCode,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'fiscalCodeMd'),
+									validatorInput: value => fieldValidationInputFunc(value, 'fiscalCodeMd')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-industryId',
+									label: 'Industry',
+									options: this.listIndustry,
+									size: 10,
+									searchable: true,
+									value: this.orgValues.industryId,
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-employeeId',
+									label: 'Nr. of Employees',
+									value: this.orgValues.employeeId,
+									options: this.employeesSelect,
+									required: true,
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-vitCode',
+									type: 'text',
+									label: 'VAT code',
+									value: this.orgValues.vitCode,
+									className: 'col-12 col-md-6 col-lg-4',
+									validator: value => fieldValidationFunc(value, 'varChar50'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar50')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-email',
+									type: 'text',
+									label: 'Email',
+									required: true,
+									value: this.orgValues.email,
+									className: 'col-12 col-md-6 col-lg-4',
+									validator: value => fieldValidationFunc(value, 'email')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-phone',
+									label: 'Phone',
+									type: 'tel',
+									inputPrefix: '(+373)',
+									value: this.orgValues.phone,
+									className: 'col-12 col-md-6 col-lg-4',
+									validator: value => fieldValidationFunc(value, 'phone'),
+									validatorInput: value => fieldValidationInputFunc(value, 'phone')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-webSite',
+									label: 'Web site',
+									type: 'text',
+									value: this.orgValues.webSite,
+									className: 'col-12 col-md-6 col-lg-4',
+									validator: value => fieldValidationFunc(value, 'varChar50'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar50')
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-bank',
+									label: 'Bank',
+									type: 'text',
+									value: this.orgValues.bank,
+									className: 'col-12 col-md-6 col-lg-4',
+									validator: value => fieldValidationFunc(value, 'varChar500'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar500')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-iBANCode',
+									label: 'Code IBAN',
+									type: 'text',
+									value: this.orgValues.iBANCode,
+									className: 'col-12 col-md-6 col-lg-4',
+									validator: value => fieldValidationFunc(value, 'varChar128'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar128')
+								}
+							},
+
+							{
+								name: 'Input',
+								props: {
+									id: 'company-codSwift',
+									type: 'text',
+									label: 'Swift code',
+									value: this.orgValues.codSwift,
+									className: 'col-12 col-md-6 col-lg-4',
+									validator: value => fieldValidationFunc(value, 'varChar50'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar50')
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-clientType',
+									label: 'Type of Organization',
+									value: this.orgValues.clientType,
+									required: true,
+									options: [
+										{
+											label: 'Prospect',
+											value: 0,
+										},
+										{
+											label: 'Client',
+											value: 1
+										},
+										{
+											label: 'Lead',
+											value: 2
+										},
+									],
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-isDeleted',
+									label: 'Status of Organization',
+									required: true,
+									disabled: !this.editableOrgModal,
+									value: this.orgValues.isDeleted,
+									options: [
+										{
+											label: 'Active',
+											value: 'false',
+										},
+										{
+											label: 'Inactive',
+											value: 'true'
+										}
+									],
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'addressC-regionId',
+									label: 'Region',
+									size: 10,
+									required: true,
+									searchable: true,
+									options: this.regions,
+									value: this.orgAddress.regionId,
+									className: 'col-12 col-md-6 col-lg-3'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'addressC-cityId',
+									label: 'City',
+									noneSelectedText: 'Select region first',
+									options: this.cities,
+									required: true,
+									size: 10,
+									searchable: true,
+									value: this.orgAddress.cityId,
+									className: 'col-12 col-md-6 col-lg-3'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'addressC-street',
+									label: 'Street',
+									type: 'text',
+									value: this.orgAddress.street,
+									className: 'col-12 col-md-6 col-lg-3',
+									validator: value => fieldValidationFunc(value, 'varChar128'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar128')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'addressC-zip',
+									label: 'Zip Code',
+									type: 'text',
+									value: this.orgAddress.zip,
+									className: 'col-12 col-md-6 col-lg-3',
+									validator: value => fieldValidationFunc(value, 'zip'),
+									validatorInput: value => fieldValidationInputFunc(value, 'zip')
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'company-description',
+									label: 'Description',
+									value: this.orgValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: this.orgFormSubmits,
+						onSubmit: () => {
+							if (!this.editableOrgModal) {
+								this.addNewOrganization().then(() => {
+									this.addOrganizationAddress(this.newOrgId).then(() => {
+										this.modalContactKey++;
+										$(`#${this.modalOrgProps.id}`).modal("hide");
+										$(`#${this.modalContactProps.id}`).modal("show");
+									});
+								});
+							} else {
+								this.updateOrganization().then(() => {
+									$(`#${this.modalOrgProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+				modalAddressProps() {
+					return {
+						id: 'orgAddress',
+						label: 'Organization addresses',
+						modalSize: 'lg',
+						formInputs: [
+							{
+								name: 'Listing',
+								props: {
+									inputPrefix: 'address-',
+									id: 'company-adresses',
+									className: 'col-12',
+									items: this.orgAddresses,
+									columns: this.orgColumns,
+									deleteItem: addressId => {
+										this.deleteOrganizationAddress(addressId);
+									}
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'address-regionId',
+									label: 'Region',
+									size: 10,
+									searchable: true,
+									options: this.regions,
+									value: this.orgAddress.regionId,
+									className: 'col-12 col-md-6 col-lg-3'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'address-cityId',
+									label: 'City',
+									noneSelectedText: 'Select region first',
+									options: this.cities,
+									required: true,
+									size: 10,
+									searchable: true,
+									value: this.orgAddress.cityId,
+									className: 'col-12 col-md-6 col-lg-3'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'address-street',
+									label: 'Street',
+									type: 'text',
+									value: this.orgAddress.street,
+									className: 'col-12 col-md-6 col-lg-3',
+									validator: value => fieldValidationFunc(value, 'textField'),
+									validatorInput: value => fieldValidationInputFunc(value, 'textField')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'address-zip',
+									label: 'Zip Code',
+									type: 'text',
+									value: this.orgAddress.zip,
+									className: 'col-12 col-md-6 col-lg-3',
+									validator: value => fieldValidationFunc(value, 'zip'),
+									validatorInput: value => fieldValidationInputFunc(value, 'zip')
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalAddressProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddressButton
+								}
+							}
+						],
+						onSubmit: () => {
+							this.addOrganizationAddress(this.orgAddress.organizationId).then(() => {
+								const orgId = this.orgAddress.organizationId;
+								this.resetOrgAddressValues();
+								this.cities = [];
+								this.orgAddress.organizationId = orgId;
+							});
+						}
+					}
+				},
+				modalChangeType() {
+					return {
+						id: 'orgType',
+						modalSize: 'sm',
+						label: 'Organization addresses',
+						formInputs: [
+							{
+								name: 'Select',
+								props: {
+									id: 'clientType',
+									label: 'Type of Organization',
+									value: this.orgValues.clientType,
+									required: true,
+									options: [
+										{
+											label: 'Prospect',
+											value: 0,
+										},
+										{
+											label: 'Client',
+											value: 1
+										},
+										{
+											label: 'Lead',
+											value: 2
+										},
+									],
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalChangeType.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.updateOrganization().then(() => {
+								$(`#${this.modalChangeType.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				tableFilters() {
+					return [
+						{
+							id: 'ClientType',
+							label: 'Type of Organization',
+							values: [
+								{
+									label: 'Prospect',
+									value: 'Prospect',
+									active: false
+								},
+								{
+									label: 'Client',
+									value: 'Client',
+									active: false
+								},
+								{
+									label: 'Lead',
+									value: 'Lead',
+									active: false
+								}
+							]
+						}
+					]
+				},
+				customQueryparams() {
+					const params = {
+						gSearch: this.searchString,
+						includeDeleted: true
+					};
+					this.pageRequestFilters.forEach((a,i) => {
+						for (pv in a) {
+							params[`pageRequestFilters[${i}][${pv}]`] = a[pv];
+						}
+					});
+					return params;
+				},
+			},
+			created: async function () {
+				this.resetOrgModalValues();
+				customAjaxRequest(apiEndpoints.OrganizationHelper.GetSelectorsForOrganization, 'GET').then(result => {
+					this.listIndustry = this.convertHelperToSelectList(result.listIndustry);
+					this.showFilters = true;
+				});
+				customAjaxRequest(apiEndpoints.OrganizationAddress.GetAllRegions).then(result => {
+					this.regions = this.convertToSelectList(result);
+				});
+				customAjaxRequest(apiEndpoints.Organization.GetAllOrganization).then(result => {
+					this.organizationsListSelect = this.convertToSelectList(result);
+				});
+				customAjaxRequest(apiEndpoints.Employee.GetAllEmployees).then(result => {
+					this.employeesSelect = this.convertEmployeeToSelectList(result);
+				});
+			},
+			methods: {
+				async addNewOrganization() {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Organization.AddNewOrganization, 'PUT', this.orgValues).then(result => {
+							this.loadOrganizationsforSelect();
+							this.newOrgId = result;
+							this.newContactValues.organizationId = result;
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async addOrganizationAddress(orgId) {
+					this.waitAddressButton = true;
+					this.orgAddress.organizationId = orgId;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.AddOrganizationAddress, 'PUT', this.orgAddress).then(result => {
+							this.appendAddressToListing(result).then(() => {
+								this.waitAddressButton = false;
+							});
+							this.resetOrgAddressValues();
+							resolve(true);
+						}).catch(e => {
+							this.waitAddressButton = false;
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async updateOrganization() {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Organization.UpdateOrganization, 'POST', this.orgValues).then(() => {
+							resolve(true);
+							this.updateOrganizationAddress();
+							this.tableKey++;
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async loadOrganization(organizationId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Organization.GetOrganizationById, 'GET', { organizationId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async addNewContact() {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contact.AddNewContact, 'PUT', this.newContactValues).then(() => {
+							resolve(true);
+							this.tableKey++;
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async disableOrganizations(orgs) {
+					orgs.forEach((organizationId, i, a) => {
+						customAjaxRequest(apiEndpoints.Organization.DeactivateOrganizationById, 'DELETE', { organizationId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadOrganizationsforSelect() {
+					customAjaxRequest(apiEndpoints.Organization.GetAllOrganization, 'GET', {includeDeleted: false}).then(result => {
+						this.organizationsListSelect = this.convertToSelectList(result);
+					});
+				},
+				async loadRegionCities(regionId) {
+					customAjaxRequest(apiEndpoints.OrganizationAddress.GetAllCitiesByRegionId, 'get', { regionId }).then(result => {
+						this.cities = this.convertToSelectList(result);
+					});
+				},
+				async loadAddresses(organizationId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.GetAddressesByOrganizationId, 'GET', { organizationId }).then(result => {
+							this.orgAddresses = result;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async appendAddressToListing(addressId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.GetAddressById, 'GET', { addressId }).then(result => {
+							this.orgAddresses.push(result);
+							resolve(true);
+						}).then(e => {
+							reject(e);
+						});
+					});
+				},
+				deleteOrganizations(orgs) {
+					orgs.forEach((organizationId, i, a) => {
+						customAjaxRequest(apiEndpoints.Organization.DeleteOrganizationPermanentlyById, 'DELETE', { organizationId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				activateOrganizations(orgs) {
+					orgs.forEach((organizationId, i, a) => {
+						customAjaxRequest(apiEndpoints.Organization.ActivateOrganizationById, 'POST', { organizationId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				changeOrgType(orgId) {
+					this.loadOrganization(orgId).then(result => {
+						this.orgValues = result;
+						this.editOrgId = orgId;
+						this.refreshInputs++;
+						this.modalTypeKey++;
+						$(`#${this.modalChangeType.id}`).modal("show");
+					});
+				},
+				addContacts(orgId) {
+					this.newOrgId = orgId;
+					this.resetContactValues();
+					this.editableOrgModal = true;
+					this.newContactValues.organizationId = orgId;
+					this.modalContactKey++;
+					$(`#${this.modalContactProps.id}`).modal("show");
+				},
+				addAddresses(orgId) {
+					this.loadAddresses(orgId).then(() => {
+						this.resetOrgAddressValues();
+						this.cities = [];
+						this.orgAddress.organizationId = orgId;
+						this.refreshInputs++;
+						this.modalAddressKey++;
+						$(`#${this.modalAddressProps.id}`).modal("show");
+					});
+				},
+				deleteOrganizationAddress(addressId) {
+					this.orgAddresses = this.orgAddresses.filter(a => a.id != addressId);
+					customAjaxRequest(apiEndpoints.OrganizationAddress.DeleteOrganizationAddress, 'DELETE', { addressId });
+				},
+				updateOrganizationAddress() {
+					customAjaxRequest(apiEndpoints.OrganizationAddress.UpdateOrganizationAddress, 'POST', this.orgAddress);
+				},
+				resetOrgModalValues() {
+					this.orgValues = {
+						name: null,
+						clientType: 0,
+						bank: null,
+						email: null,
+						phone: null,
+						webSite: null,
+						fiscalCode: null,
+						iBANCode: null,
+						industryId: null,
+						employeeId: null,
+						description: null,
+						vitCode: null,
+						codSwift: null,
+						isDeleted: false
+					}
+					this.editOrgId = '';
+					this.refreshInputs++;
+				},
+				resetOrgAddressValues() {
+					this.orgAddress = {
+						organizationId: null,
+						regionId: null,
+						cityId: null,
+						street: null,
+						zip: null
+					}
+					this.editOrgId = '';
+					this.refreshInputs++;
+				},
+				resetContactValues() {
+					this.newContactValues = {
+						organizationId: '',
+						email: '',
+						phone: '',
+						firstName: '',
+						lastName: '',
+						description: ''
+					}
+				},
+				editOrganization(orgId) {
+					this.loadOrganization(orgId).then(result => {
+						this.editableOrgModal = true;
+						this.orgValues = result;
+						if (result.addresses[0]) {
+							this.orgAddress = {
+								id: result.addresses[0].id,
+								organizationId: result.id,
+								regionId: result.addresses[0].city.regionId,
+								cityId: result.addresses[0].cityId,
+								street: result.addresses[0].street,
+								zip: result.addresses[0].zip
+							}
+							this.loadRegionCities(result.addresses[0].city.regionId);
+						}
+						this.orgValues.iBANCode = result.ibanCode;
+						this.editOrgId = orgId;
+						this.refreshInputs++;
+						this.modalOrgKey++;
+						$(`#${this.modalOrgProps.id}`).modal("show");
+					});
+				},
+				emitValueOrg(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					if (val.id.includes('addressC')) {
+						this.orgAddress[val.id.replace('addressC-', '')] = newVal;
+						if (val.id === 'addressC-regionId') {
+							this.loadRegionCities(val.value);
+						}
+					} else {
+						this.orgValues[val.id.replace('company-', '')] = newVal;
+					}
+				},
+				emitValueOrgType(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.orgValues[val.id] = newVal;
+				},
+				emitValueAddress(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.orgAddress[val.id.replace('address-', '')] = newVal;
+					if (val.id === 'address-regionId') {
+						this.loadRegionCities(val.value);
+					}
+				},
+				resetValue(val) {
+					if (val === 'company-adresses') {
+						resetOrgAddressValues();
+					}
+				},
+				emitValueContact(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.newContactValues[val.id.replace('contact-', '')] = newVal;
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertEmployeeToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.interval,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertHelperToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.text,
+							value: e.value
+						}
+						return newObj;
+					});
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.disableOrganizations(action.value);
+							break;
+						} case 'activate': {
+							this.activateOrganizations(action.value);
+							break;
+						} case 'edit': {
+							this.editOrganization(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteOrganizations(action.value);
+							break;
+						} case 'changeType': {
+							this.changeOrgType(action.value[0]);
+							break;
+						} case 'addContacts': {
+							this.addContacts(action.value[0]);
+							break;
+						} case 'addAddresses': {
+							this.addAddresses(action.value[0]);
+							break;
+						} case 'details': {
+							window.location.href = '/organizations/details?id=' + action.value[0];
+							break;
+						}
+					}
+				},
+				findObjectByPropValue(array, value, prop) {
+					return array.find(x => x[prop] === value);
+				},
+				getRegionName(regionId) {
+					return this.findObjectByPropValue(this.regions, regionId, 'value').label;
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				},
+				openWarningWindow() {
+					alert('Organization should have at least one active contact');
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: v.value
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				}
+			}
+		});
+		Vue.component('OrgTable', {
+			template: `
+				<div>
+					<Table
+						:fields="tableFields"
+						:apiUrl="apiUrl"
+						:httpMethod="httpMethod"
+						@@triggeredMenuAction="action"
+						tableId="organizations-table"
+						:sortOrder="tableConfig.sortCol"
+						:initialPageSize="20"
+						:reload="tableKey"
+						dataPath="result.result"
+						:customQueryparams="customQueryparams"
+						:hasCustomQUeryparams="true"
+						:actionsSingle="tableActions.single"
+						:actionsSingleDisabled="tableActions.singleDisabled"
+						:actionsMultiple="tableActions.multiple"
+						:actionsMultipleDisabled="tableActions.multipleDisabled"
+						:haveContextMenu="true"
+					>
+						<slot slot="name" slot-scope="props">
+							<a :href="'/organizations/details?id=' + props.rowData.id" @@click.stop>
+								{{ props.rowData.name }}
+							</a>
+						</slot>
+						<slot slot="contacts" slot-scope="props">
+							<template v-for="contact in props.rowData.contacts">
+								<a
+									:key="contact.id"
+									v-if="!contact.isDeleted"
+									:href="'/contact/details?id=' + contact.id"
+									class="btn btn-outline-primary user-rectangle"
+									@@click.stop
+									:title="contact.firstName + ' ' + contact.lastName"
+									>
+									{{ initials(contact.firstName, contact.lastName) }}
+								</a>
+							</template>
+						</slot>
+					</Table>
+				</div>
+			`,
+			data() {
+				return {
+					apiUrl: apiEndpoints.CrmCommon.GetAllOrganizationForTable,
+					httpMethod: 'post',
+					tableFields: [
+						{
+							name: 'name',
+							title: 'Name',
+							sortField: 'name',
+							visible: true
+						},
+						{
+							name: 'leadCount',
+							title: 'Leads',
+							sortField: 'leadCount',
+							visible: true
+						},
+						{
+							name: 'email',
+							title: 'Email',
+							visible: true
+						},
+						{
+							name: 'contacts',
+							title: 'Contacts',
+							visible: true,
+							dataClass: 'td-users'
+						},
+						{
+							name: 'clientType',
+							title: `Type`,
+							sortField: 'clientType',
+							visible: true,
+							formatter(value) {
+								return value === 0 ? 'Prospect' : value === 1 ? 'Client' : 'Lead';
+							}
+						},
+						{
+							name: 'isDeleted',
+							title: 'Status',
+							visible: true
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'name',
+								sortField: 'name',
+								direction: 'asc'
+							}
+						]
+					},
+					tableActions: {
+						single: {
+							"details": { name: "Details", icon: "details" },
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" },
+							"changeType": { name: "Change type", icon: "repeat" },
+							"addContacts": { name: "Add contacts", icon: "user-plus" },
+							"addAddresses": { name: "Add addresses", icon: "map-pin" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					}
+				}
+			},
+			props: {
+				tableKey: Number,
+				customQueryparams: Object,
+				searchString: {
+					type: String,
+					default: ''
+				}
+			},
+			methods: {
+				initials(name, surname) {
+					return name && surname ? `${name.charAt(0)} ${surname.charAt(0)}` : 'UP';
+				},
+				action(action) {
+					this.$emit('action', action);
+				}
+			}
+		});
+	</script>
+}

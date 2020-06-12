@@ -1,0 +1,38 @@
+<script type="text/x-template" id="modal-template">
+	<div class="modal fade" id="{{modalProps.id}}" role="dialog">
+		<div class="modal-dialog regular" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h6 class="modal-title mb-0" id="modal-label">{{modalProps.label}}</h6>
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x modal-close-icon" data-dismiss="modal" aria-label="Close"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				</div>
+				<div class="modal-inner">
+					<form id="form-create-activity-list" action="/ActivityLists/Create" method="post" novalidate="novalidate">
+						<div class="modal-body">
+							<input hidden="" type="text" data-val="true" data-val-required="'Id' must not be empty." id="Id" name="Id" value="">
+							<input hidden="" type="text" data-val="true" data-val-required="'Project Id' must not be empty." id="ProjectId" name="ProjectId" value="d0e7e144-5b1a-4d61-a757-5eba8fe39b9f">
+
+							<label class="float-label" for="Name">Name</label>
+							<input class="form-control" placeholder="Activity list name" autocomplete="off" required="" type="text" data-val="true" data-val-maxlength="The length of 'Name' must be 256 characters or fewer." data-val-maxlength-max="256" data-val-required="'Name' must not be empty." id="Name" name="Name" value="">
+							<span class="invalid-feedback field-validation-valid" data-valmsg-for="Name" data-valmsg-replace="true"></span>
+
+							<label class="float-label-select" for="ActivityListStatus">Activity List</label>
+							<div class="dropdown bootstrap-select form-control">
+								<select class="form-control selectpicker" data-val="true" data-val-required="The Activity List field is required." id="ActivityListStatus" name="ActivityListStatus" tabindex="-98">
+									<option value="0">New</option>
+									<option value="1">Ongoing</option>
+									<option value="2">Completed</option>
+								</select><button type="button" class="btn dropdown-toggle btn-light" data-toggle="dropdown" role="button" data-id="ActivityListStatus" title="New"><div class="filter-option"><div class="filter-option-inner"><div class="filter-option-inner-inner">New</div></div> </div></button><div class="dropdown-menu " role="combobox"><div class="inner show" role="listbox" aria-expanded="false" tabindex="-1"><ul class="dropdown-menu inner show"></ul></div></div>
+							</div>
+							<span class="invalid-feedback field-validation-valid" data-valmsg-for="ActivityListStatus" data-valmsg-replace="true"></span>
+						</div>
+						<div class="modal-footer">
+							<button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+							<button type="submit" class="btn btn-success" id="btn-create-activity-list">Add</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</script>

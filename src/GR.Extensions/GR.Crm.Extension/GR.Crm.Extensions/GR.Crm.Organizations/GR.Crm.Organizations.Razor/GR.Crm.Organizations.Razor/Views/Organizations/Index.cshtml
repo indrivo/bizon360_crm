@@ -1,0 +1,385 @@
+@{
+	ViewData["Title"] = "Organizations";
+}
+@section Styles
+{
+}
+
+<Organizations />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/tableCell.js"></script>
+	<script src="~/themes/gear/js/components/table/tableRow.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('Organizations', {
+			template: `
+						<div>
+							<PageOptionsBar :searcheable="true" :pageOptionsComponents="pageOptionsComponents" />
+							<div>
+								<Table tableId="organizations" v-if="tableData" :data="tableData" :columns="columns"/>
+							</div>
+							<Modal :modalProps="modalOrgProps"/>
+							<Modal :modalProps="modalContactProps"/>
+						</div>`,
+			data() {
+				return {
+					tableData: null,
+					addOrgModalShow: false,
+					columns: [
+						'name',
+						'email'
+					],
+					modalOrgProps: {
+						id: 'addorg',
+						modalSize: 'lg',
+						label: 'Add organization',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'company-name',
+									type: 'text',
+									label: 'Name Organization',
+									required: true,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-email',
+									type: 'email',
+									label: 'Email',
+									required: true,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-industry',
+									label: 'Industry',
+									options: [
+										{
+											label: 'Agriculture',
+											value: 'agriculture'
+										},
+										{
+											label: 'Automative',
+											value: 'automative'
+										}
+									],
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'employees-number',
+									label: 'Nr. of Employees',
+									options: [
+										{
+											label: '1 - 10 employees',
+											value: 'from1to10'
+										},
+										{
+											label: '10 - 100 employees',
+											value: 'from10to100'
+										}
+									],
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-phone',
+									label: 'Phone',
+									type: 'tel',
+									required: true,
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-website',
+									label: 'Web site',
+									type: 'text',
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-country',
+									label: 'Country',
+									options: [],
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-city',
+									label: 'City',
+									options: [],
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-street',
+									label: 'Street',
+									type: 'text',
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-zip',
+									label: 'Zip Code',
+									type: 'text',
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-bank',
+									label: 'Bank',
+									type: 'text',
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-iban',
+									label: 'Code IBAN',
+									type: 'text',
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-fiscal',
+									label: 'Code Fiscal',
+									type: 'text',
+									className: 'col-12 col-md-6 col-lg-4'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'company-type',
+									label: 'Type of Organization',
+									type: 'text',
+									required: true,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'company-status',
+									label: 'Status of Organization',
+									required: true,
+									options: [
+										{
+											label: 'Prospect',
+											value: 'prospect'
+										},
+										{
+											label: 'Client',
+											value: 'client'
+										},
+										{
+											label: 'Lead',
+											value: 'lead'
+										}
+									],
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'company-description',
+									label: 'Description',
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalOrgProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onClick: () => {
+										console.log('Submit');
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save & Add Contacts ',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onClick: () => {
+										$(`#${this.modalOrgProps.id}`).modal("hide");
+										$(`#${this.modalContactProps.id}`).modal("show");
+									}
+								}
+							}
+						]
+					},
+					modalContactProps: {
+						id: 'addcontacts',
+						label: 'Add organization',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-firstname',
+									type: 'text',
+									label: 'First name',
+									required: true,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-lastname',
+									type: 'text',
+									label: 'Last name',
+									required: true,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'contact-organization',
+									label: 'Organization',
+									required: true,
+									options: [
+										{
+											label: 'OrgName',
+											value: 'orgId'
+										}
+									],
+									value: {
+										label: 'OrgName',
+										value: 'orgId'
+									},
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-email',
+									type: 'email',
+									label: 'Email',
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'contact-phone',
+									type: 'tel',
+									label: 'Phone',
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'contact-description',
+									label: 'Description',
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalContactProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onClick: () => {
+										console.log('Submit');
+									}
+								}
+							},
+						]
+					},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add organization',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									$(`#${this.modalOrgProps.id}`).modal("show");
+								}
+							}
+						}
+					]
+				};
+			},
+			beforeCreate: async function () {
+				try {
+					const response = await axios.get(apiEndpoints.GetAllOrganization);
+					if (response.data.is_success) {
+						this.tableData = response.data.result;
+					} else {
+						toast.notifyErrorList(response.data.error_keys);
+					}
+				} catch (error) {
+					toast.notifyErrorList(error)
+				}
+			},
+		});
+
+
+	</script>
+}

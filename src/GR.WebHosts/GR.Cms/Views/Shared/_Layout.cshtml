@@ -1,0 +1,105 @@
+@using GR.Identity.Abstractions
+@using GR.Notifications.Razor.Extensions
+@inject IAppProvider AppProvider
+
+@{
+	Layout = null;
+}
+
+<!DOCTYPE html>
+@if (User.Identity.IsAuthenticated)
+{
+	<html>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>@ViewData["Title"]</title>
+		@RenderSection("PreScripts", required: false)
+		<partial name="_BootstrapThemeStyles" />
+		<partial name="_BootstrapThemeScripts" />
+		@RenderSection("Styles", required: false)
+		@Html.PartialViewStyles()
+		@Html.IncludeCoreJavascriptPlugins()
+		@Html.IncludeNotificationJavascriptPlugins()
+		<link rel="stylesheet" href="~/lib/bootstrap-select/css/bootstrap-select.min.css">
+		<link rel="stylesheet" href="~/lib/bootstrap-datepicker/css/bootstrap-datepicker.min.css">
+		<link rel="stylesheet" href="~/themes/gear/css/loader.css">
+		<link rel="stylesheet" href="~/themes/gear/css/gear.min.css">
+		<link rel="stylesheet" href="~/themes/gear/css/style.css">
+	</head>
+	<body>
+		<div id="app"></div>
+		<script src="~/lib/vue/vue.js"></script>
+		<script src="~/lib/vuex/vuex.min.js"></script>
+		<script src="~/themes//gear/js/vuetable-2-full.js"></script>
+		<script src="~/lib/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
+		<script src="~/lib/bootstrap-select/js/bootstrap-select.min.js"></script>
+		<script src="~/themes/gear/js/ckeditor/ckeditor.js"></script>
+		<script src="~/themes/gear/js/components/customCkeditor.js"></script>
+		<script src="~/lib/Sortable/Sortable.js"></script>
+		<script src="~/themes/gear/utils/validations.js"></script>
+		<script src="~/themes/gear/utils/config.js"></script>
+		<script src="~/themes/gear/utils/requester.js"></script>
+		<script src="~/themes/gear/js/components/loader.js"></script>
+		<script src="~/themes/gear/js/components/hamburger.js"></script>
+		<script src="~/themes/gear/js/components/breadcrumb.js"></script>
+		<script src="~/themes/gear/js/components/button.js"></script>
+		<script src="~/themes/gear/js/components/search.js"></script>
+		<script src="~/themes/gear/js/components/userBlock.js"></script>
+		<script src="~/themes/gear/js/components/menuLink.js"></script>
+		<script src="~/themes/gear/js/components/menu.js"></script>
+		<script src="~/themes/gear/js/store/index.js"></script>
+		<script src="~/themes/gear/js/layout/header.js"></script>
+		<script src="~/themes/gear/js/directives/close-on-cLick-outside.js"></script>
+		<script src="~/themes/gear/js/directives/vsetvalue.js"></script>
+		<script src="~/themes/gear/js/layout/the-menu-sidebar.js"></script>
+		<script src="~/themes/gear/js/layout/the-user-sidebar.js"></script>
+		@RenderSection("Scripts", false)
+		@Html.PartialViewScripts()
+		<script type="text/x-template" id="app-template">
+			<div>
+				<Header />
+				<div class="container-fluid">
+					<div class="row flex-nowrap">
+						<TheMenuSidebar />
+						<div class="main-content flex-grow-1">
+							<div>
+								<div class="d-flex align-items-center">
+									<h2 class="page-title">@ViewData["Title"]</h2>
+									<Breadcrumb v-if="menuLoaded" className="breadcrumb ml-auto mr-5" />
+								</div>
+							</div>
+							@RenderBody()
+						</div>
+						<TheUserSidebar />
+					</div>
+				</div>
+			</div>
+		</script>
+		<script>
+			moment.locale('en');
+			const t = key => window.translate(key);
+			const toast = new ToastNotifier();
+			Vue.use(Vuex);
+			var app = new Vue({
+				el: "#app",
+				template: "#app-template",
+				store,
+				computed: {
+					menuLoaded() {
+						return this.$store.state.menuLoaded
+					}
+				},
+				components: {
+					store
+				}
+			});
+		</script>
+	</body>
+</html>
+}
+else
+{
+@RenderBody()
+@RenderSection("Scripts", false)
+}

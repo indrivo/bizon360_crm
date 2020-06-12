@@ -1,0 +1,22 @@
+@import url("https://fonts.googleapis.com/css?family=Blinker:300,400,600,700&display=swap");
+
+body {
+	background-color: #F6F8FA;
+	font-family: "Blinker", sans-serif;
+}
+
+.navbar-brand {
+	max-width: 50px;
+	max-height: 50px;
+	padding: 0;
+	margin-right: 0;
+}
+
+.field-validation-error span {
+	font-size: 12px;
+	line-height: 12px;
+}
+
+.form-control:disabled {
+	color: #C9CDD1;
+}

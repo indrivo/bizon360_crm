@@ -1,0 +1,333 @@
+@{
+	ViewData["Title"] = "Payment codes";
+}
+
+<PageContent />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/file.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('PageContent', {
+			template: `
+					<div>
+						<PageOptionsBar :searcheable="true" :pageOptionsComponents="pageOptionsComponents" @@searchInput="searchTable"/>
+						<div>
+							<Table
+								v-if="dataLoad"
+								:fields="tableFields"
+								:apiUrl="apiUrl"
+								:httpMethod="httpMethod"
+								@@triggeredMenuAction="action"
+								tableId="workCategories-table"
+								:initialPageSize="20"
+								:customQueryparams="customQueryparams"
+								:hasCustomQUeryparams="true"
+								:reload="tableKey"
+								dataPath="result.result"
+								:actionsSingle="tableActions.single"
+								:actionsSingleDisabled="tableActions.singleDisabled"
+								:actionsMultiple="tableActions.multiple"
+								:actionsMultipleDisabled="tableActions.multipleDisabled"
+								:haveContextMenu="true"
+							>
+							</Table>
+						</div>
+						<Modal :refreshInputs="refreshInputs" :modalProps="modalProps" @@newValue="emitModalValue" :inputsKey="modalKey"/>
+					</div>`
+			,
+			data() {
+				return {
+					apiUrl: apiEndpoints.PaymentCode.GetAllPaginatedPaymentCode,
+					httpMethod: 'get',
+					modalKey: 0,
+					dataLoad: false,
+					tableFields: [
+						{
+							name: 'name',
+							title: 'Name',
+							visible: true
+						},
+						{
+							name: 'code',
+							title: 'Code',
+							visible: true
+						},
+						{
+							name: 'workCategoryId',
+							title: 'WorkCategory',
+							visible: true,
+							formatter: val => {
+								return this.workCategoriesSelect.filter(wc => wc.value === val)[0].label;
+							}
+						}
+					],
+					dataLoad: false,
+					modalValues: {},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add payment code',
+								btnType: 'success',
+								className: 'ml-auto',
+								onClick: () => {
+									this.resetModalValues();
+									this.editableModal = false;
+									$(`#${this.modalProps.id}`).modal("show");
+								}
+							}
+						}
+					],
+					tableActions: {
+						single: {
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					waitAddButton: false,
+					editableModal: false,
+					refreshInputs: 0,
+					searchString: '',
+					workCategoriesSelect: []
+				};
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						'includeDeleted': true,
+						'gSearch': this.searchString
+					}
+				},
+				modalProps() {
+					return {
+						id: 'paymentModal',
+						label: this.editableModal ? 'Edit payment code' : 'Add payment code',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'entityField-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									className: 'col-12',
+									value: this.modalValues.name,
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'entityField-code',
+									type: 'text',
+									label: 'Code',
+									required: true,
+									className: 'col-12',
+									value: this.modalValues.code
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'entityField-workCategoryId',
+									label: 'Work category',
+									required: true,
+									className: 'col-12',
+									value: this.modalValues.workCategoryId,
+									options: this.workCategoriesSelect
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							if (!this.editableModal) {
+								this.addNewEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							} else {
+								this.updateEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+			},
+			created() {
+				this.resetModalValues();
+				customAjaxRequest(apiEndpoints.WorkCategory.GetAllWorkCategories).then(res => {
+					this.workCategoriesSelect = this.convertToSelectList(res);
+					this.dataLoad = true;
+				});
+			},
+			methods: {
+				async addNewEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PaymentCode.AddPaymentCode, 'PUT', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PaymentCode.UpdatePaymentCode, 'POST', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.PaymentCode.DisablePaymentCode, 'POST', { paymentCodeId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.PaymentCode.ActivatePaymentCode, 'POST', { paymentCodeId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.PaymentCode.RemovePaymentCode, 'DELETE', { paymentCodeId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadEntity(entityId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PaymentCode.GetPaymentCodeById, 'GET', { paymentCodeId: entityId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				editEntity(entityId) {
+					this.loadEntity(entityId).then(result => {
+						this.editableModal = true;
+						this.modalValues = result;
+						this.modalKey++;
+						this.refreshInputs++;
+						$(`#${this.modalProps.id}`).modal("show");
+					});
+				},
+				resetModalValues() {
+					this.modalValues = {
+						name: null,
+						code: null,
+						workCategoryId: null
+					}
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						return {
+							label: e.name,
+							value: e.id
+						}
+					});
+				},
+				emitModalValue(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.modalValues[val.id.replace('entityField-', '')] = newVal;
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateEntities(action.value);
+							break;
+						} case 'activate': {
+							this.activateEntities(action.value);
+							break;
+						} case 'edit': {
+							this.editEntity(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteEntities(action.value);
+							break;
+						}
+					}
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				}
+			}
+		});
+
+	</script>
+}

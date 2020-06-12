@@ -1,0 +1,177 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+	<TargetFramework>netcoreapp2.2</TargetFramework>
+	<UserSecretsId>aspnet-Identity.API-FE765FD1-1EB9-4D6A-9FA5-E8C49BFECB2F</UserSecretsId>
+	<MvcRazorExcludeRefAssembliesFromPublish>false</MvcRazorExcludeRefAssembliesFromPublish>
+	<TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
+	<TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
+	<IsPackable>false</IsPackable>
+	<LangVersion>7.3</LangVersion>
+	<Version>1.8.0</Version>
+	<Authors>Lupei Nicolae</Authors>
+	<Company>Indrivo</Company>
+	<Product>Gear</Product>
+	<Description>BPMN</Description>
+	<Copyright>Indrivo 2019</Copyright>
+	<FileVersion>1.8.0</FileVersion>
+	<AssemblyVersion>1.8.0</AssemblyVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Remove="Views\Organizations\AddOrganization.cshtml" />
+    <Content Remove="Views\Organizations\_PartialModal.cshtml" />
+    <Content Remove="wwwroot\themes\gear\js\app.js" />
+    <Content Remove="wwwroot\themes\gear\js\ckeditor\lang\ro.js" />
+    <Content Remove="wwwroot\themes\gear\js\ckeditor\lang\ru.js" />
+    <Content Remove="wwwroot\themes\gear\js\main.js" />
+    <Content Remove="wwwroot\themes\gear\js\requester.js" />
+    <Content Remove="wwwroot\themes\gear\utils\validator.js" />
+  </ItemGroup>
+
+	<ItemGroup>
+	<PackageReference Include="AspNet.Security.OAuth.LinkedIn" Version="2.1.0" />
+	<PackageReference Include="Microsoft.AspNetCore.All" />
+	<PackageReference Include="Microsoft.AspNetCore.Authentication.Facebook" Version="2.2.0" />
+	<PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="2.2.4" PrivateAssets="All" />
+	<PackageReference Include="Microsoft.AspNetCore.HealthChecks" Version="1.0.0" />
+	<PackageReference Include="Microsoft.Extensions.HealthChecks.SqlServer" Version="1.0.0" />
+	<PackageReference Include="Microsoft.Web.LibraryManager.Build" Version="2.0.96" />
+	<PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+	<DotNetCliToolReference Include="Microsoft.DotNet.Xdt.Tools" Version="2.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+	<EmbeddedResource Include="Configuration\CustomEntities.json">
+	  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	</EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="wwwroot\lib\vue-chartjs\vue-chartjs.js" />
+    <None Include="wwwroot\lib\vue-chartjs\vue-chartjs.js.map" />
+    <None Include="wwwroot\lib\vue-chartjs\vue-chartjs.min.js" />
+    <None Include="wwwroot\lib\vue-chartjs\vue-chartjs.min.js.map" />
+  </ItemGroup>
+
+  <ItemGroup>
+	  <ProjectReference Include="..\..\GR.Extensions\GR.Application.Extension\GR.WebApplication\GR.WebApplication.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Audit.Extension\GR.Audit.Razor\GR.Audit.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Backup.Extension\GR.Backup.Razor\GR.Backup.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Cache.Extension\GR.Cache.Razor\GR.Cache.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Contracts\GR.Crm.Contracts.Infrastructure\GR.Crm.Contracts.Infrastructure.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Dashboard\GR.Crm.Dashboard.Abstractions\GR.Crm.Dashboard.Abstractions.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Dashboard\GR.Crm.Dashboard.Infrastructure\GR.Crm.Dashboard.Infrastructure.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Dashboard\GR.Crm.Dashboard.Razor\GR.Crm.Dashboard.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Leads\GR.Crm.Leads.Infrastructure\GR.Crm.Leads.Infrastructure.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Organizations\GR.Crm.Organization\GR.Crm.Organizations.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Payments\GR.Crm.Payments.Implementation\GR.Crm.Payments.Implementation.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Payments\GR.Crm.Payments.Razor\GR.Crm.Payments.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.PipeLines\GR.Crm.PipeLines\GR.Crm.PipeLines.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Reports\GR.Crm.Reports.Abstraction\GR.Crm.Reports.Abstraction.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Reports\GR.Crm.Reports.Infrastructure\GR.Crm.Reports.Infrastructure.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Reports\GR.Crm.Reports.Razor\GR.Crm.Reports.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Teams\GR.Crm.Teams.Abstractions\GR.Crm.Teams.Abstractions.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Extensions\GR.Crm.Teams\GR.Crm.Teams.Implementation\GR.Crm.Teams.Implementation.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm.Razor\GR.Crm.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Crm.Extension\GR.Crm\GR.Crm.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Dashboard.Extension\GR.Dashboard.Razor\GR.Dashboard.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Dashboard.Extension\GR.Dashboard\GR.Dashboard.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.DynamicEntityStorage.Extension\GR.DynamicEntityStorage\GR.DynamicEntityStorage.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Email.Extension\GR.Email.Razor\GR.Email.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Email.Extension\GR.Email\GR.Email.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Entities.Extension\GR.Entities.EntityBuilder.MsSql\GR.Entities.EntityBuilder.MsSql.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Entities.Extension\GR.Entities.EntityBuilder.Postgres\GR.Entities.EntityBuilder.Postgres.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Entities.Extension\GR.Entities.Razor\GR.Entities.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Entities.Security.Extension\GR.Entities.Security.Razor\GR.Entities.Security.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Entities.Security.Extension\GR.Entities.Security\GR.Entities.Security.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Forms.Extension\GR.Forms.Razor\GR.Forms.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Forms.Extension\GR.Forms\GR.Forms.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Identity.Extension\GR.Identity.IdentityServer4\GR.Identity.IdentityServer4.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Identity.Extension\GR.Identity.LdapAuth\GR.Identity.LdapAuth.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Identity.Extension\GR.Identity.Permissions\GR.Identity.Permissions.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Identity.Extension\GR.Identity.Razor\GR.Identity.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Install.Extension\GR.Install.Razor\GR.Install.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Install.Extension\GR.Install\GR.Install.csproj" />	
+	<ProjectReference Include="..\..\GR.Extensions\GR.Localization.Extension\GR.Localization.Razor\GR.Localization.Razor.csproj" />	
+	<ProjectReference Include="..\..\GR.Extensions\GR.Localization.Extension\GR.Localization\GR.Localization.csproj" />	
+	<ProjectReference Include="..\..\GR.Extensions\GR.Logger.Extension\GR.Logger.Abstractions\GR.Logger.Abstractions.csproj" />	
+	<ProjectReference Include="..\..\GR.Extensions\GR.Logger.Extension\GR.Logger.Razor\GR.Logger.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.MultiTenant.Extension\GR.MultiTenant.Razor\GR.MultiTenant.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Notifications.Extension\GR.Notifications.Razor\GR.Notifications.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Notifications.Extension\GR.Notifications\GR.Notifications.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Render.Extension\GR.PageRender.Razor\GR.PageRender.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Render.Extension\GR.PageRender\GR.PageRender.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Report.Extension\GR.Report.Dynamic.Razor\GR.Report.Dynamic.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.Report.Extension\GR.Report.Dynamic\GR.Report.Dynamic.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.TaskManager.Extension\GR.TaskManager.Razor\GR.TaskManager.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.TaskManager.Extension\GR.TaskManager\GR.TaskManager.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.UI.Menu.Extension\GR.UI.Menu.Razor\GR.UI.Menu.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.UI.Menu.Extension\GR.UI.Menu\GR.UI.Menu.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.WorkFlow.Extension\GR.WorkFlows.Razor\GR.WorkFlows.Razor.csproj" />
+	<ProjectReference Include="..\..\GR.Extensions\GR.WorkFlow.Extension\GR.WorkFlows\GR.WorkFlows.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+	<Content Update="fileSettings.json">
+	  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	</Content>
+	<Content Update="nlog.config">
+	  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	</Content>
+	<Content Update="Views\Company\ConfirmInvitedUserByEmail.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\Contact\Details.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\Contact\Index.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\CrmVocabularies\JobPositions.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\CrmVocabularies\ServiceTypes.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\CrmVocabularies\SolutionTypes.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\CrmVocabularies\Sources.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\CrmVocabularies\TechnologyTypes.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\Industry\Index.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\Organizations\Details.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\PipeLine\Index.cshtml">
+	  <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\TaskManager\Details.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\TaskManager\Index.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\TaskType\Index.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\Team\Index.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+	<Content Update="Views\WorkCategory\Index.cshtml">
+	  <Pack>false</Pack>
+	</Content>
+  </ItemGroup>
+  <Target Name="ApplyXdtTransform" BeforeTargets="_TransformWebConfig">
+	<PropertyGroup>
+	  <_SourceWebConfig>$(MSBuildThisFileDirectory)Web.config</_SourceWebConfig>
+	  <_XdtTransform>$(MSBuildThisFileDirectory)Web.$(Configuration).config</_XdtTransform>
+	  <_TargetWebConfig>$(PublishDir)Web.config</_TargetWebConfig>
+	</PropertyGroup>
+	<Exec Command="dotnet transform-xdt --xml &quot;$(_SourceWebConfig)&quot; --transform &quot;$(_XdtTransform)&quot; --output &quot;$(_TargetWebConfig)&quot;" Condition="Exists('$(_XdtTransform)')" />
+  </Target>
+</Project>

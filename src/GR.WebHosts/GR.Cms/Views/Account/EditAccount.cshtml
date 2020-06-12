@@ -1,0 +1,103 @@
+@{
+    ViewData["Title"] = "Change password";
+}
+
+<ChangePassword />
+
+@section  Scripts {
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script>
+		Vue.component('ChangePassword', {
+			template: `
+				<div class="d-flex">
+					<form id="password-update" class="card col-12 col-md-4 pt-4 ml-40px" @@submit.prevent="updatePassword">
+						<Input
+							id="currentPassword"
+							label="Current password"
+							type="password"
+							:required="true"
+							:value="requestData.currentPassword"
+							@@newValue="newValue"
+						/>
+						<Input
+							id="password"
+							label="New password"
+							type="password"
+							:required="true"
+							:value="requestData.password"
+							:validator="passwordValidator"
+							:validatorInput="fieldValidationInputFunc"
+							@@newValue="newValue"
+						/>
+						<Input
+							id="repeatPassword"
+							label="Repeat password"
+							type="password"
+							:required="true"
+							:value="requestData.repeatPassword"
+							:validator="repeatPasswordValidator"
+							@@newValue="newValue"
+						/>
+						<div class="d-flex">
+							<Button
+								label="Update"
+								btnType="success"
+								btnDOMType="submit"
+								className="ml-auto mb-3"
+								:waiting="waitingButton"
+							/>
+						</div>
+					</form>
+				</div>
+			`,
+			data() {
+				return {
+					waitingButton: false,
+					requestData: {
+						userId: null,
+						currentPassword: null,
+						password: null,
+						repeatPassword: null
+					}
+				}
+			},
+			created() {
+				this.getUserData();
+			},
+			methods: {
+				getUserData() {
+					customAjaxRequest(apiEndpoints.Users.GetCurrentUserInfo).then(userData => {
+						this.requestData.userId = userData.id;
+					});
+				},
+				newValue(val) {
+					this.requestData[val.id] = val.value;
+				},
+				updatePassword() {
+					this.waitingButton = true;
+					customAjaxRequest(apiEndpoints.Users.ChangePassword, 'POST', this.requestData).then(() => {
+						this.requestData= {
+							userId: null,
+							currentPassword: null,
+							password: null,
+							repeatPassword: null
+						}
+					}).catch(e => {
+						toast.notifyErrorList(e);
+					}).finally(() => {
+						this.waitingButton = false;
+					});
+				},
+				passwordValidator(value) {
+					return fieldValidationFunc(value, 'password');
+				},
+				fieldValidationInputFunc(value) {
+					return fieldValidationFunc(value, 'password');
+				},
+				repeatPasswordValidator(value) {
+					return value === this.requestData.password ? true : window.translate('system_field_invalid_repeat_password');
+				}
+			}
+		});
+	</script>
+}

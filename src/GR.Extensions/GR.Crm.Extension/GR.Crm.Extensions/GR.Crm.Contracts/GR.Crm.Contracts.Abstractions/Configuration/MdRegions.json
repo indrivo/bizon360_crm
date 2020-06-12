@@ -1,0 +1,12 @@
+[
+    {
+        "Id": "11447a80-eff9-4f68-b24f-353ab2d5ee92",
+        "Name": "Owner",
+        "geoPosition": "nord"
+    },
+    {
+        "id": "c92e023d-6804-43e8-88a8-ec807427d850",
+        "name": "Member",
+        "geoPosition": "nord" 
+    }
+]

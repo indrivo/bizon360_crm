@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Models\**" />
+    <Compile Remove="ViewModels\**" />
+    <EmbeddedResource Remove="Models\**" />
+    <EmbeddedResource Remove="ViewModels\**" />
+    <None Remove="Models\**" />
+    <None Remove="ViewModels\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\GR.Crm.Leads\GR.Crm.Leads.Abstractions\GR.Crm.Leads.Abstractions.csproj" />
+    <ProjectReference Include="..\..\GR.Crm.Organizations\GR.Crm.Organizations.Abstractions\GR.Crm.Organizations.Abstractions.csproj" />
+    <ProjectReference Include="..\..\GR.Crm.Payments\GR.Crm.Payments.Abstractions\GR.Crm.Payments.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

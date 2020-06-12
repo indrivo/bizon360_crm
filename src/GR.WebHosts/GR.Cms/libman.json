@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "defaultProvider": "cdnjs",
+  "libraries": [
+    {
+      "library": "vue@2.6.11",
+      "destination": "wwwroot/lib/vue/"
+    },
+    {
+      "library": "vuex@3.1.2",
+      "destination": "wwwroot/lib/vuex/"
+    },
+    {
+      "library": "axios@0.19.2",
+      "destination": "wwwroot/lib/axios/"
+    },
+    {
+      "library": "vue-clickaway@2.2.1",
+      "destination": "wwwroot/lib/vue-clickaway/"
+    },
+    {
+      "library": "bootstrap-select@1.13.12",
+      "destination": "wwwroot/lib/bootstrap-select/"
+    },
+    {
+      "library": "jquery-contextmenu@2.9.0",
+      "destination": "wwwroot/lib/jquery-contextmenu/"
+    },
+    {
+      "library": "bootstrap-datepicker@1.9.0",
+      "destination": "wwwroot/lib/bootstrap-datepicker/",
+      "files": [
+        "js/bootstrap-datepicker.min.js",
+        "css/bootstrap-datepicker.min.css"
+      ]
+    },
+    {
+      "library": "Vue.Draggable@15.0.0",
+      "destination": "wwwroot/lib/Vue.Draggable/"
+    },
+    {
+      "library": "Sortable@1.10.1",
+      "destination": "wwwroot/lib/Sortable/"
+    },
+    {
+      "library": "jspdf@1.5.3",
+      "destination": "wwwroot/lib/jspdf/"
+    },
+    {
+      "library": "html2canvas@0.4.1",
+      "destination": "wwwroot/lib/html2canvas/"
+    },
+    {
+      "library": "html2pdf.js@0.9.2",
+      "destination": "wwwroot/lib/html2pdf.js/"
+    },
+    {
+      "library": "es6-promise@4.1.1",
+      "destination": "wwwroot/lib/es6-promise/"
+    },
+    {
+      "library": "feather-icons@4.28.0",
+      "destination": "wwwroot/lib/feather-icons/"
+    },
+    {
+      "library": "Chart.js@2.9.3",
+      "destination": "wwwroot/lib/Chart.js/"
+    },
+    {
+      "library": "vue-chartjs@3.5.0",
+      "destination": "wwwroot/lib/vue-chartjs/"
+    }
+  ]
+}

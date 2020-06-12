@@ -1,0 +1,576 @@
+@{
+	ViewData["Title"] = "Report " + Html.ViewBag.Type;
+}
+@section Styles {
+	<style>
+		.reports-indicator,
+		.reports-incator-label {
+			width: 180px;
+		}
+
+		.groupedByLabels-item {
+			font-size: 16px;
+			font-weight: 600;
+		}
+
+			.groupedByLabels-item:last-child {
+				margin-left: 3px;
+			}
+
+				.groupedByLabels-item:last-child .groupByDelimiter {
+					display: none;
+				}
+
+		.reports-incator-label {
+			color: #808890;
+			line-height: 1;
+		}
+	</style>
+}
+
+<Report />
+
+@section Scripts {
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script>
+		Vue.filter('numberWithCommas', x => {
+			return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+		});
+	</script>
+	<script id="report-template" type="text/x-template">
+		<div>
+			<PageOptionsBar v-if="filtersLoaded"
+							:pageOptionsComponents="pageOptionsComponents"
+							:filters="tableFilters"
+							:groupBy="groupByList"
+							@@filterResult="filterResult"
+							@@groupResult="groupResult"
+							ref="pageOptions" />
+			<hr />
+			<div class="container-fluid">
+				<div class="row">
+					<div class="col-12 col-lg-8 position-relative" style="min-height: 400px">
+						<div v-show="!dataLoaded" class="section-loader"><Loader /></div>
+						<transition name="fade">
+							<div v-if="dataLoaded" class="ml-5px card py-15px px-20">
+								<div v-for="(repDataItem, i) in reportData" :key="'reportDataItem-' + i">
+									<div class="groupedByLabels d-flex" :class="{'mt-20px' : i != 0}">
+										<template v-for="(repGroup, name, index) in repDataItem.groupKeys">
+											<div v-if="repGroup" :key="'groupKey' + index" class="groupedByLabels-item">
+												{{repGroup}}
+												<span class="groupByDelimiter">/</span>
+											</div>
+										</template>
+									</div>
+									<hr class="my-10px" />
+									<div class="reports-indices-labels d-flex">
+										<div v-for="(repInd, index) in config.fields" :key="'reportDataItemProp-' + index">
+											<div class="reports-incator-label" :class="'indicator-'+ index">
+												{{ repInd.label }}
+											</div>
+										</div>
+									</div>
+									<hr class="my-10px" />
+									<div class="reports-indices-indices d-flex">
+										<div v-for="(repInd, index) in config.fields" :key="'reportDataItemProp-' + index">
+											<div class="reports-indicator" :class="'indicator-'+ index">
+												<template v-if="repInd.formatter">
+													{{ repInd.formatter(repDataItem[repInd.id]) }}
+												</template>
+												<template v-else>
+													{{ repDataItem[repInd.id] }}
+												</template>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</transition>
+					</div>
+				</div>
+			</div>
+		</div>
+	</script>
+	<script>
+		const reportConfig = {
+			leads: {
+				api: apiEndpoints.CrmReport.LeadReport,
+				filters: [
+					{
+						id: 'LeadStateId',
+						label: 'Lead status',
+						api: apiEndpoints.Leads.GetAllLeadStates,
+						requestType: 'get',
+						textProp: 'name',
+						valProp: 'id'
+					},
+					{
+						id: 'Owner',
+						label: 'Owner',
+						api: apiEndpoints.Users.GetUsers,
+						requestType: 'get',
+						textProp: 'userFirstName',
+						textProp2: 'userLastName',
+						valProp: 'id'
+					},
+					{
+						id: 'GeoPosition',
+						label: 'Geo position',
+						api: apiEndpoints.OrganizationAddress.GetGeoPosition,
+						requestType: 'get',
+						textProp: 'text',
+						valProp: 'value'
+					},
+					{
+						id: 'PipeLineId',
+						label: 'Pipeline',
+						api: apiEndpoints.PipeLines.GetAll,
+						requestType: 'get',
+						textProp: 'name',
+						valProp: 'id'
+					},
+					{
+						id: 'period',
+						label: 'Period',
+						idStartDate: 'StartDate',
+						idEndDate: 'EndDate',
+						isDateRange: true,
+						values: [
+							{
+								active: false,
+								label: 'Start date',
+								value: 'Start date'
+							},
+							{
+								active: false,
+								label: 'End date',
+								value: 'End date'
+							}
+						]
+					},
+					{
+						id: 'WorkCategoryId',
+						label: 'Work category',
+						api: apiEndpoints.WorkCategory.GetAllWorkCategories,
+						requestType: 'get',
+						textProp: 'name',
+						valProp: 'id'
+					}
+				],
+				groupBy: [
+					{
+						id: 'GeoPosition',
+						label: 'Geo position'
+					},
+					{
+						id: 'State',
+						label: 'State'
+					},
+					{
+						id: 'Stage',
+						label: 'Stage'
+					},
+					{
+						id: 'PipeLine',
+						label: 'Pipeline'
+					},
+					{
+						id:'WorkCategory',
+						label:'WorkCategory'
+					},
+					{
+						id: 'Owner',
+						label: 'Owner',
+					},
+					{
+						id: 'Data',
+						label: 'Data'
+					}
+				],
+				fields: [
+					{
+						id: 'count',
+						label: 'Lead count'
+					},
+					{
+						id: 'sumValue',
+						label: 'Total sum',
+						formatter: val => `${val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} lei`
+					},
+					{
+						id: 'averageCommission',
+						label: 'Commision',
+						formatter: val => `${val} %`
+					},
+					{
+						id: 'count',
+						label: 'Number of users'
+					}
+				]
+			},
+			tasks: {
+				api: apiEndpoints.CrmReport.TaskReport,
+				filters: [
+					{
+						id: 'Agent',
+						label: 'Agent',
+						api: apiEndpoints.Users.GetUsers,
+						requestType: 'get',
+						textProp: 'userFirstName',
+						textProp2: 'userLastName',
+						valProp: 'id'
+					},
+					{
+						id: 'GeoPosition',
+						label: 'Geo position',
+						api: apiEndpoints.OrganizationAddress.GetGeoPosition,
+						requestType: 'get',
+						textProp: 'text',
+						valProp: 'value'
+					},
+					{
+						id: 'Priority',
+						label: 'Priority',
+						api: apiEndpoints.TaskManager.GetTaskPriorityList,
+						requestType: 'get',
+						textProp: 'text',
+						valProp: 'value'
+					},
+					{
+						id: 'Status',
+						label: 'Status',
+						api: apiEndpoints.TaskManager.GetTaskStatusList,
+						requestType: 'get',
+						textProp: 'text',
+						valProp: 'value'
+					},
+					{
+						id: 'period',
+						label: 'Period',
+						idStartDate: 'StartDate',
+						idEndDate: 'EndDate',
+						isDateRange: true,
+						values: []
+					}
+				],
+				groupBy: [
+					{
+						id: 'GeoPosition',
+						label: 'Geo position'
+					},
+					{
+						id:'WorkCategory',
+						label:'WorkCategory'
+					},
+					{
+						id:'Status',
+						label:'Status'
+					},
+					{
+						id:'Priority',
+						label:'Priority'
+					},
+					{
+						id: 'Data',
+						label: 'Data'
+					}
+				],
+				fields: [
+					{
+						id: 'count',
+						label: 'Tasks count'
+					}
+				]
+			},
+			agreements: {
+				api: apiEndpoints.CrmReport.AgreementsReport,
+				filters: [
+					{
+						id: 'Agent',
+						label: 'Agent',
+						api: apiEndpoints.Users.GetUsers,
+						requestType: 'get',
+						textProp: 'userFirstName',
+						textProp2: 'userLastName',
+						valProp: 'id'
+					},
+					{
+						id: 'GeoPosition',
+						label: 'Geo position',
+						api: apiEndpoints.OrganizationAddress.GetGeoPosition,
+						requestType: 'get',
+						textProp: 'text',
+						valProp: 'value'
+					},
+					{
+						id: 'period',
+						label: 'Period',
+						idStartDate: 'StartDate',
+						idEndDate: 'EndDate',
+						isDateRange: true,
+						values: []
+					},
+					{
+						id: 'WorkCategory',
+						label: 'Work category',
+						api: apiEndpoints.WorkCategory.GetAllWorkCategories,
+						requestType: 'get',
+						textProp: 'name',
+						valProp: 'id'
+					}
+				],
+				groupBy: [
+					{
+						id: 'GeoPosition',
+						label: 'Geo position'
+					},
+					{
+						id:'WorkCategory',
+						label:'WorkCategory'
+					},
+					{
+						id: 'Agent',
+						label: 'Agent',
+					},
+					{
+						id: 'Data',
+						label: 'Data'
+					}
+				],
+				fields: [
+					{
+						id: 'count',
+						label: 'Agreements count'
+					},
+					{
+						id: 'sumValue',
+						label: 'Total sum',
+						formatter: val => `${val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} lei`
+					}
+				]
+			},
+			payments: {
+				api: apiEndpoints.CrmReport.PaymentsReport,
+				filters: [
+					{
+						id: 'GeoPosition',
+						label: 'Geo position',
+						api: apiEndpoints.OrganizationAddress.GetGeoPosition,
+						requestType: 'get',
+						textProp: 'text',
+						valProp: 'value'
+					},
+					{
+						id: 'period',
+						label: 'Period',
+						idStartDate: 'StartDate',
+						idEndDate: 'EndDate',
+						isDateRange: true,
+						values: []
+					},
+					{
+						id: 'WorkCategory',
+						label: 'Work category',
+						api: apiEndpoints.WorkCategory.GetAllWorkCategories,
+						requestType: 'get',
+						textProp: 'name',
+						valProp: 'id'
+					},
+					{
+						id: 'OrganizationId',
+						label: 'Organization',
+						api: apiEndpoints.Organization.GetAllOrganization,
+						requestType: 'get',
+						textProp: 'name',
+						valProp: 'id'
+					}
+				],
+				groupBy: [
+					{
+						id: 'GeoPosition',
+						label: 'Geo position'
+					},
+					{
+						id:'WorkCategory',
+						label:'WorkCategory'
+					},
+					{
+						id: 'Data',
+						label: 'Data'
+					},
+					{
+						id: 'Organization',
+						label: 'Organization'
+					}
+				],
+				fields: [
+					{
+						id: 'count',
+						label: 'Payments count'
+					},
+					{
+						id: 'sumQuantity',
+						label: 'Quantity sum'
+					}
+				]
+			}
+		}
+		const utils = {
+			convertArrayToFilterList: (array, valProp, textProp, textProp2 = null, activeItems = []) => {
+				return array.map(e => {
+					const newObj = {
+						label: textProp2 ? `${e[textProp]} ${e[textProp2]}` : e[textProp],
+						value: e[valProp],
+						active: activeItems.includes(e[valProp])
+					}
+					return newObj;
+				});
+			}
+		}
+
+		Vue.component('Report', {
+			template: '#report-template',
+			data() {
+				return {
+					config: Object.assign({}, reportConfig['@ViewBag.Type']),
+					pageOptionsComponents: [],
+					pageRequestFilters: this.getPreselectedFilters(),
+					pageGroupValues: this.getPreselectedGroupBy(),
+					dataTableFilters: [],
+					filtersLoaded: false,
+					reportData: [],
+					dataLoaded: false
+				}
+			},
+			computed: {
+				tableFilters() {
+					return this.dataTableFilters.length > 0 ? this.dataTableFilters : null;
+				},
+				groupByList() {
+					return this.config.groupBy;
+				},
+				geoupByActiveCount() {
+					let count = 0;
+					if (this.reportData.length > 0) {
+						for (rk in this.reportData[0].groupKeys) {
+							if (rk) {
+								count++;
+							}
+						}
+					}
+					return count;
+				},
+				groupByCount() {
+					let count = 0;
+					if (this.reportData.length > 0) {
+						for (rk in this.reportData[0].groupKeys) {
+							count++;
+						}
+					}
+					return count;
+				}
+			},
+			created() {
+				let promises = [];
+				this.config.filters.forEach((filter, i, a) => {
+					if (filter.api) {
+						promises.push(customAjaxRequest(filter.api, filter.requestType));
+					} else {
+						this.dataTableFilters.push(filter);
+					}
+				});
+				Promise.all(promises).then(results => {
+					let i = 0;
+					this.config.filters.forEach(filter => {
+						if (filter.api) {
+							const convertedArray = utils.convertArrayToFilterList(results[i], filter.valProp, filter.textProp, filter.textProp2);
+							const copyFilter = filter;
+							copyFilter.values = convertedArray;
+							this.dataTableFilters.push(copyFilter);
+							i++;
+						}
+					});
+					this.filtersLoaded = true;
+					this.pageRequestFilters.forEach(f => {
+						const targetFilter = this.dataTableFilters.find(df => df.id === f.Propriety);
+						if (targetFilter) {
+							const targetValue = targetFilter.values.find(tv => tv.value === f.Value);
+							targetValue.active = true;
+						}
+					});
+					this.$nextTick(function() {
+						if (this.pageGroupValues.length > 0) {
+							this.$refs.pageOptions.$refs.filters.$refs.groupBy.dataInputValue = this.pageGroupValues;
+						}
+					});
+					this.getReportData();
+				});
+			},
+			mounted() {
+
+			},
+			methods: {
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								let fValue = v.value;
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: fValue
+								});
+							}
+						});
+					});
+				},
+				groupResult(val) {
+					this.pageGroupValues = val;
+				},
+				getReportData() {
+					this.dataLoaded = false;
+					customAjaxRequest(this.config.api, 'POST', { filters: this.pageRequestFilters, listGroupProperties: this.pageGroupValues }).then(result => {
+						this.reportData = result;
+						this.dataLoaded = true;
+					});
+				},
+				getPreselectedFilters() {
+					return this.getProprietes('filter');
+				},
+				getPreselectedGroupBy() {
+					return this.getProprietes('groupBy');
+				},
+				getProprietes(type) {
+					const url_string = window.location.href;
+					const url = new URL(url_string);
+					let params = [];
+					for (const [Propriety, Value] of url.searchParams.entries()) {
+						if (type === 'filter') {
+							const filter = reportConfig['@ViewBag.Type'].filters.find(f => f.id === Propriety);
+							if (filter) {
+								params.push({ Propriety, Value });
+							}
+						} else {
+							const groupBy = reportConfig['@ViewBag.Type'].groupBy.find(gb => gb.id === Value);
+							if (groupBy) {
+								params.push(groupBy.id);
+							}
+						}
+					}
+					return params;
+				}
+			},
+			watch: {
+				pageRequestFilters: {
+					deep: true,
+					handler() {
+						this.getReportData();
+					}
+				},
+				pageGroupValues() {
+					this.getReportData();
+				}
+			}
+		});
+	</script>
+}

@@ -1,0 +1,464 @@
+@using GR.Core.Extensions;
+@using GR.Crm.Contracts.Abstractions.Models
+@model ContractTemplate
+
+@{
+	ViewData["Title"] = Model.Name;
+}
+
+<ContractTemplate />
+
+@section Scripts {
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.0/axios.js"></script>
+	<script src="~/lib/Vue.Draggable/vuedraggable.js"></script>
+	<script src="~/lib/es6-promise/es6-promise.auto.js"></script>
+	<script src="~/lib/jspdf/jspdf.min.js"></script>
+	<script src="~/lib/html2canvas/html2canvas.js"></script>
+	<script src="~/lib/html2pdf.js/html2pdf.bundle.js"></script>
+	<script>
+		const templateId = '@Model.Id';
+		//Vue.use(CKEditor);
+		Vue.component('SectionsActions', {
+			template: `
+				<div class="d-flex sections-actions mt-20px">
+					<Button v-for="(a, prop) in actions"
+						:key="prop"
+						:className="a.className"
+						:label="a.label"
+						:btnType="a.btnType"
+						:onClick="a.onClick"
+						:waiting="a.waiting"
+					/>
+				</div>
+			`,
+			props: {
+				actions: Object
+			},
+			methods: {
+				emitAction(value) {
+					this.$emit('action', value);
+				}
+			}
+		});
+		Vue.component('TemplateSection', {
+			template: `
+				<div class="template-section card d-flex align-items-center flex-row px-20 py-3 mb-10px" :data-order="section.order">
+					<div class="position-relative p-2">
+						<div
+							:data-order="section.order"
+							class="drag-icon-element"
+							@@click.stop
+							@@mousedown="mosedownDrag"
+							@@mouseup="mouseUpDrag"
+							@@mouseleave="mouseLeaveDrag"
+							style="background-size: 15px"
+						>
+						</div>
+					</div>
+					<div class="ml-20px">
+						{{ section.name }}
+					</div>
+					<div class="ml-auto">
+						<div class="icon-delete-grey" @@click.stop.prevent="deleteSection(section.id)">
+						</div>
+					</div>
+				</div>
+				`,
+			props: {
+				section: Object
+			},
+			methods: {
+				deleteSection(id) {
+					this.$emit('deleteSection', id);
+				},
+				mosedownDrag(e) {
+					$(e.target).addClass('dragging');
+				},
+				mouseUpDrag(e) {
+					$(e.target).removeClass('dragging');
+				},
+				mouseLeaveDrag(e) {
+					$(e.target).removeClass('dragging');
+				}
+			}
+		});
+		Vue.component('ContractTemplate', {
+			template: `
+				<div class="mx-20px position-relative">
+					<div v-show="!dataLoaded" class="section-loader"><Loader/></div>
+					<div class="row custom-row">
+						<div class="col-12 col-md-6">
+							<div class="sections">
+								<draggable v-model="sections" @@end="dragEnd" :options="{handle:'.drag-icon-element'}">
+								   <div class="section-card" v-for="s in sections" :key="s.id" @@click="loadEditorValue(s.id)">
+										<TemplateSection :section="s" @@deleteSection="deleteSection"/>
+									</div>
+								</draggable>
+							</div>
+							<SectionsActions :actions="sectionsActions"/>
+						</div>
+						<div class="col-12 col-md-6" :class="{'disabled-editing' : isDisabled}">
+							<div class="card px-20 pt-15px pb-15px">
+								<input class="border-0 outline-0" type="text" v-model="sectionName"></input>
+								<hr class="hr-description mb-20px">
+								<div class="card template-section-ckeditor">
+									<customCkeditor id="ckeditor1" name="editor1" v-model="sectionTemplateValue" :config="editorCofig"></customCkeditor>
+								</div>
+							</div>
+						</div>
+					</div>
+					<transition name="fade">
+						<div v-if="currentSectionDeleted" class="revert-deleted position-fixed col-12 col-lg-6 py-2 d-flex rounded align-items-center">
+							<span class="text-white">You deleted a section</span>
+							<Button label="Revert"
+								className="ml-auto"
+								btnType="outline-light"
+								:onClick="revertDeletedSection"
+							/>
+							<span class="close-icon-white ml-2" @@click.stop.prevent="clearTimeout"></span>
+						</div>
+					</transition>
+					<div class="modal fade modal-preview-template" id="previewTemplate" role="dialog" style="overflow:hidden; pointer-events:none">
+						<div class="modal-dialog modal-lg mt-0" style="pointer-events: auto;" role="document">
+							<div class="doc-preview" v-click-outside="closeModal">
+								<iframe :src="iframeSrc" style="position:absolute; top: 0; left: 0; height:100%; width:100%;" ></iframe>
+							</div>
+						</div>
+					</div>
+				</div>
+			`,
+			data() {
+				return {
+					templateId: templateId,
+					sectionTemplateValue: null,
+					sectionName: null,
+					currentSectionId: null,
+					sections: [],
+					deletedSections: [],
+					currentSectionDeleted: null,
+					waitButtons: true,
+					orderChanged: false,
+					timeout: null,
+					iframeSrc: null,
+					dataLoaded: false,
+					editorCofig: {
+						removeButtons: 'save-to-pdf',
+						availableTokens: [
+							["Current Date", "CurrentDate"],
+							["Organization Name", "OrganizationName"],
+							["IDNO", "IDNO"],
+							["IBAN", "IBAN"],
+							["Bank", "Bank"],
+							["Phone", "Phone"],
+							["Email", "Email"],
+							["Cod Tva", "CodTva"],
+							["Cod Swift", "CodSwift"],
+							["Region", "Region"],
+							["City", "City"],
+							["Street", "Street"],
+							["Contact", "Contact"],
+							["Currency", "Currency"],
+							["Value", "Value"],
+							["Commission", "Commission"]
+						],
+						tokenStart: '{',
+						tokenend: '}',
+						language: 'en'
+					}
+				}
+			},
+			computed: {
+				isDisabled() {
+					return this.sectionName == null;
+				},
+				sectionsActions() {
+					return {
+						'addNewSection': {
+							'label': 'Add section',
+							'btnType': 'success',
+							'waiting': this.waitButtons,
+							'onClick': () => { this.addNewSection() }
+						},
+						'previewTemplate': {
+							'label': 'Preview',
+							'btnType': 'primary',
+							'className': 'ml-auto mr-2',
+							'waiting': this.waitButtons,
+							'onClick': () => { this.html2pdfPreview() }
+						},
+						'saveSections': {
+							'label': 'Save',
+							'btnType': 'success',
+							'waiting': this.waitButtons,
+							'onClick': () => { this.saveSections() }
+						}
+					}
+				}
+			},
+			created() {
+				this.getTemplateSections();
+				$(window).on("beforeunload", evt => {
+					if (this.contentChanged()) {
+						evt.preventDefault();
+						evt.returnValue = '';
+						return null;
+					}
+				});
+			},
+			methods: {
+				getTemplateSections() {
+					const contractTemplateId = this.templateId;
+					customAjaxRequest(apiEndpoints.Contract.GetContractTemplateSections, 'GET', { contractTemplateId }).then(sections => {
+						this.sections = this.sortSections(sections);
+						this.sections.forEach(s => {
+							s.sectionStatus = 'uncghanged';
+						});
+						this.resetCurrentSection();
+					}).finally(() => {
+						this.waitButtons = false;
+						this.dataLoaded = true;
+					});
+				},
+				async addSectionToTemplate(section) {
+					const requestData = {
+						name: section.name,
+						templateValue: String(section.templateValue),
+						contractTemplateId: this.templateId,
+					}
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contract.AddSectionToContractTemplate, 'PUT', requestData).then(sectionId => {
+							resolve(sectionId);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(section.id);
+						});
+					})
+				},
+				async updateContractSection(section) {
+					const requestData = {
+						id: section.id,
+						name: section.name,
+						templateValue: String(section.templateValue)
+					}
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contract.UpdateContractSection, 'POST', requestData).then(() => {
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					})
+				},
+				async deleteContractSection(sectionId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contract.DeleteContractSection, 'DELETE', { sectionId }).then(() => {
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					})
+				},
+				async saveSections() {
+					this.waitButtons = true;
+					let newSections = [];
+					let updatePromises = [];
+					this.sections.forEach(s => {
+						if (s.sectionStatus === 'new') {
+							newSections.push(s);
+						} else if (s.sectionStatus === 'modified') {
+							updatePromises.push(this.updateContractSection(s));
+						}
+					});
+					this.deletedSections.forEach(s => {
+						if (s.sectionStatus != 'new') {
+							updatePromises.push(this.deleteContractSection(s.id));
+						}
+					});
+					if (newSections.length > 0) {
+						newSections.forEach((s, i, a) => {
+							this.addSectionToTemplate(s).then(sectionNewId => {
+								s.id = sectionNewId;
+								s.sectionStatus = 'uncghanged';
+								if (i === a.length - 1) {
+									this.tableKey++;
+									this.currentSectionId = null;
+									this.updateSectionsPromises(updatePromises);
+								}
+							}).catch(e => {
+								toast.notifyErrorList(e);
+							});
+						});
+					} else {
+						this.updateSectionsPromises(updatePromises);
+					}
+				},
+				async updateSectionsPromises(promises) {
+					if (promises.length > 0) {
+						return Promise.all(promises).then(() => {
+							this.deletedSections = [];
+							this.currentSectionDeleted = false;
+							if (this.orderChanged) {
+								this.orderSections().finally(() => {
+									this.waitButtons = false;
+									this.getTemplateSections();
+									this.orderChanged = false;
+								});
+							} else {
+								this.waitButtons = false;
+								this.getTemplateSections();
+							}
+						}).catch(() => {
+							this.waitButtons = false;
+						});
+					} else if (this.orderChanged) {
+						this.orderSections().finally(() => {
+							this.waitButtons = false;
+							this.getTemplateSections();
+							this.orderChanged = false;
+						});
+					} else {
+						this.waitButtons = false;
+					}
+				},
+				orderSections() {
+					return new Promise((resolve, reject) => {
+						let data = [];
+						this.sections.forEach((s,i) => {
+							data.push({
+								sectionId: s.id,
+								order: i
+							});
+						});
+						customAjaxRequest(apiEndpoints.Contract.OrderSection, 'POST', { data }).then(() => {
+							resolve(true);
+						}).catch(e => {
+							reject(false);
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				contentChanged() {
+					if (this.deletedSections.length > 0) {
+						return true;
+					} else if (this.orderChanged) {
+						return true;
+					} else {
+						let response = false;
+						this.sections.forEach(s => {
+							if (s.sectionStatus === 'modified') {
+								response = true;
+							}
+						});
+						return response;
+					}
+				},
+				addNewSection() {
+					const id = `newSection-${this.sections.length + this.deletedSections.length + 1}`;
+					this.sections.push({
+						id,
+						name: 'New section',
+						order: this.sections.length,
+						templateValue: '',
+						sectionStatus: 'new'
+					});
+					this.loadEditorValue(id);
+				},
+				deleteSection(id) {
+					const section = Object.assign({}, this.findObjectByPropValue(this.sections, id, 'id'));
+					this.deletedSections.push(section);
+					this.currentSectionDeleted = id;
+					this.sections = this.sections.filter(s => s.id !== id);
+					this.resetCurrentSection();
+				},
+				revertDeletedSection() {
+					const section = Object.assign({}, this.findObjectByPropValue(this.deletedSections, this.currentSectionDeleted, 'id'));
+					this.sections.push(section);
+					this.deletedSections = this.sections.filter(s => s.id !== this.currentSectionDeleted);
+					this.currentSectionDeleted = null;
+				},
+				html2pdfPreview() {
+					this.waitButtons = true;
+					let sectionsString = '';
+					this.sections.forEach(s => {
+						sectionsString += s.templateValue;
+					});
+					var opt = {
+						  margin:       [57, 85, 57, 42],
+						  filename:     'Preview.pdf',
+						  image:        { type: 'jpeg', quality: 0.98 },
+						  html2canvas:  { scale: 2 },
+						  jsPDF:        { unit: 'pt' }
+					};
+					let worker = html2pdf();
+					worker.from(sectionsString, 'string').set(opt).outputPdf('bloburl', { 'filename': 'Preview.pdf', putOnlyUsedFonts: true }).then(r => {
+						this.iframeSrc = r;
+						$('#previewTemplate').modal('show');
+						this.waitButtons = false;
+					});
+				},
+				closeModal() {
+					$('#previewTemplate').modal('hide');
+				},
+				clearTimeout() {
+					clearTimeout(this.timeout);
+					this.currentSectionDeleted = null;
+					this.timeout = null;
+				},
+				saveDreftSection() {
+					if (this.currentSectionId) {
+						const section = this.findObjectByPropValue(this.sections, this.currentSectionId, 'id');
+						section.name = this.sectionName;
+						section.templateValue = this.sectionTemplateValue;
+						if (section.sectionStatus === 'uncghanged') {
+							section.sectionStatus = 'modified';
+						}
+					}
+				},
+				loadEditorValue(sectionId) {
+					this.saveDreftSection();
+					const section = this.findObjectByPropValue(this.sections, sectionId, 'id');
+					this.sectionTemplateValue = section.templateValue != 'null' ? section.templateValue : '';
+					this.sectionName = section.name;
+					this.currentSectionId = section.id;
+				},
+				resetCurrentSection() {
+					this.sectionName = null,
+					this.currentSectionId = null;
+					this.sectionTemplateValue = null;
+				},
+				findObjectByPropValue(array, value, prop) {
+					return array.find(x => x[prop] === value);
+				},
+				sortSections(array) {
+					if (array) {
+						return array.sort(function (x, y) {
+							return (x.order < y.order) ? -1 : 1;
+						});
+					} else {
+						return [];
+					}
+				},
+				dragEnd() {
+					this.orderChanged = true;
+				},
+			},
+			watch: {
+				sectionName() {
+					this.saveDreftSection();
+				},
+				sectionTemplateValue() {
+					this.saveDreftSection();
+				},
+				currentSectionDeleted(value) {
+					if (value) {
+						this.timeout = setTimeout(() => {
+							this.currentSectionDeleted = null;
+							this.timeout = null;
+						}, 7000);
+					}
+				}
+			}
+		});
+	</script>
+}

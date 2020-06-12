@@ -1,0 +1,338 @@
+@{
+	ViewData["Title"] = "Regions";
+}
+
+<MetadataPage />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/file.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('MetadataPage', {
+			template: `
+					<div>
+						<PageOptionsBar :searcheable="true" :pageOptionsComponents="pageOptionsComponents" @@searchInput="searchTable"/>
+						<div>
+							<Table
+								v-if="dataLoad"
+								:fields="tableFields"
+								:apiUrl="apiUrl"
+								:httpMethod="httpMethod"
+								@@triggeredMenuAction="action"
+								tableId="workCategories-table"
+								:customQueryparams="customQueryparams"
+								:hasCustomQUeryparams="true"
+								:initialPageSize="20"
+								:reload="tableKey"
+								:sortOrder="tableConfig.sortCol"
+								dataPath="result.result"
+								:actionsSingle="tableActions.single"
+								:actionsSingleDisabled="tableActions.singleDisabled"
+								:actionsMultiple="tableActions.multiple"
+								:actionsMultipleDisabled="tableActions.multipleDisabled"
+								:haveContextMenu="true"
+							>
+							</Table>
+						</div>
+						<Modal :refreshInputs="refreshInputs" :modalProps="modalProps" @@newValue="emitModalValue" :inputsKey="modalKey"/>
+					</div>`
+			,
+			data() {
+				return {
+					apiUrl: apiEndpoints.OrganizationAddress.GetAllPaginatedRegions,
+					httpMethod: 'get',
+					dataLoad: false,
+					modalValues: {},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add region',
+								btnType: 'success',
+								className: 'ml-auto',
+								onClick: () => {
+									this.editableModal = false;
+									this.resetModalValues();
+									this.modalKey++;
+									$(`#${this.modalProps.id}`).modal("show");
+								}
+							}
+						}
+					],
+					tableActions: {
+						single: {
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					waitAddButton: false,
+					editableModal: false,
+					refreshInputs: 0,
+					geoPositionsSelect: [],
+					geoPositions: [],
+					searchString: '',
+					tableFields: [
+						{
+							name: 'name',
+							title: 'Name',
+							visible: true,
+							sortField: 'name',
+						},
+						{
+							name: 'geoPosition',
+							title: 'Geo position',
+							sortField: 'geoPosition',
+							visible: true,
+							formatter: val => {
+								return this.geoPositions.filter(gp => gp.value == val)[0].text;
+							}
+						},
+						{
+							name: 'isDeleted',
+							title: 'Status',
+							sortField: 'isDeleted',
+							visible: true
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'name',
+								sortField: 'name',
+								direction: 'asc'
+							}
+						]
+					},
+					modalKey: 0
+				}
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						'includeDeleted': true,
+						'gSearch': this.searchString
+					}
+				},
+				modalProps() {
+					return {
+						id: 'regionModal',
+						label: this.editableModal ? 'Edit region' : 'Add region',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'region-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									className: 'col-12',
+									value: this.modalValues.name
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'region-geoPosition',
+									label: 'Geo position',
+									required: true,
+									className: 'col-12',
+									options: this.geoPositionsSelect,
+									value: this.modalValues.geoPosition
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							if (!this.editableModal) {
+								this.addNewEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							} else {
+								this.updateEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+			},
+			created() {
+				this.resetModalValues();
+				customAjaxRequest(apiEndpoints.OrganizationAddress.GetGeoPosition).then(result => {
+					this.geoPositionsSelect = this.convertToSelectList(result);
+					this.geoPositions = result;
+					this.dataLoad = true;
+				});
+			},
+			methods: {
+				async addNewEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.AddRegion, 'PUT', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.UpdateRegion, 'POST', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.DisableRegion, 'POST', { regionId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.ActivateRegion, 'POST', { regionId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.DeleteRegionById, 'DELETE', { regionId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadEntity(entityId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.OrganizationAddress.GetRegionById, 'GET', { regionId: entityId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				editEntity(entityId) {
+					this.loadEntity(entityId).then(result => {
+						this.editableModal = true;
+						this.modalValues = result;
+						this.modalKey++;
+						this.refreshInputs++;
+						$(`#${this.modalProps.id}`).modal("show");
+					});
+				},
+				resetModalValues() {
+					this.modalValues = {
+						name: null,
+						geoPosition: null
+					}
+				},
+				emitModalValue(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.modalValues[val.id.replace('region-', '')] = newVal;
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.text,
+							value: e.value
+						}
+						return newObj;
+					});
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateEntities(action.value);
+							break;
+						} case 'activate': {
+							this.activateEntities(action.value);
+							break;
+						} case 'edit': {
+							this.editEntity(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteEntities(action.value);
+							break;
+						}
+					}
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				}
+			}
+		});
+
+	</script>
+}

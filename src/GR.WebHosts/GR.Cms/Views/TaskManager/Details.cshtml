@@ -1,0 +1,141 @@
+@using GR.Core.Extensions
+@using GR.TaskManager.Abstractions.Models.ViewModels
+@model GetTaskViewModel
+
+@{
+	ViewData["Title"] = Model.Name;
+}
+
+<TaskDetails />
+
+@section Scripts {
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/themes/gear/js/modalForms/taskModalForm.js"></script>
+	<script type="text/x-template" id="page-template">
+		<div class="row ml-20px mr-0">
+			<div class="col-lg-6 bg-white border rounded py-15 px-20">
+				<div class="d-flex">
+					<h6>@Localizer["details_overview"]</h6>
+					<div class="ml-auto">
+						<a href="#" class="details-page-actions" data-toggle="dropdown">
+							<i data-feather="more-vertical"></i>
+						</a>
+						<div class="dropdown-menu">
+							<a class="dropdown-item" @@click="openModal" href="#">Edit</a>
+						</div>
+					</div>
+				</div>
+				<hr class="hr-description">
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["system_details_name"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_lead"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Lead?.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_start_date"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.StartDate.ToString("dd.MM.yyyy")</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_end_date"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.EndDate.ToString("dd.MM.yyyy")</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_status"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Localizer["system_taskmanager_" + Model.Status.ToString().ToLower()]</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_priority"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Localizer["system_taskmanager_" + Model.TaskPriority.ToString().ToLower()]</p>
+					</div>
+				</div>
+				<h6 class="mt-3">@Localizer["details_description"]</h6>
+				<hr class="hr-description">
+				<div class="row no-gutters">
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Html.Raw(Model.Description)</p>
+					</div>
+				</div>
+			</div>
+			<div class="col-lg-5">
+				<h6>@Localizer["details_members"]</h6>
+				<hr class="hr-description w-100 mx-0 mb-2">
+				<div class="w-100">
+					@foreach (var m in Model.AssignedUsers)
+					{
+						<div class="w-100 d-flex mb-2">
+							<div class="d-block mb-sm-0 mb-3 mr-2">
+								<a class="btn btn-outline-primary user-rectangle"
+								   href="#"
+								   title="@m.FirstName @m.LastName">
+									@(m.FirstName.IsNullOrEmpty() ? "-" : m.FirstName.ToString().Substring(0, 1)) @(m.LastName.IsNullOrEmpty() ? "-" : m.LastName.ToString().Substring(0, 1))
+								</a>
+							</div>
+							<div class="d-block">
+								<h6 class="mb-0">
+									<a href="#">@m.FirstName @m.LastName</a>
+								</h6>
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+			<TaskModalForm ref="modals" :editable="true" @@action="modalAction" />
+		</div>
+	</script>
+	<script>
+		Vue.component('TaskDetails', {
+			template: '#page-template',
+			beforeCreate() {
+				const breadcrumbs = [
+					`<a href="/TaskManager">My tasks</a>`,
+					'@Model.Name'
+				]
+				this.$store.dispatch("setCustomBreadcrumbsAction", breadcrumbs);
+			},
+			mounted() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+			},
+			methods: {
+				openModal() {
+					this.$refs['modals'].editTask('@Model.Id');
+				},
+				modalAction() {
+					location.reload();
+				}
+			}
+		});
+	</script>
+}

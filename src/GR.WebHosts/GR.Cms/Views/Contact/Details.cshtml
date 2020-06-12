@@ -1,0 +1,119 @@
+@using GR.Core.Extensions;
+@using GR.Crm.Organizations.Abstractions.ViewModels.ContactsViewModels;
+@model GetContactViewModel
+
+@{
+	ViewData["Title"] = Model.FirstName + ' ' + Model.LastName;
+}
+
+<ContactDetails />
+
+@section Scripts {
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/textBlock.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/themes/gear/js/modalForms/contactModalForm.js"></script>
+	<script type="text/x-template" id="page-template">
+		<div class="col-lg-6 bg-white border rounded py-15 px-20 ml-40px">
+			<div class="d-flex">
+				<h6>@Localizer["details_overview"]</h6>
+				<div class="ml-auto">
+					<a href="#" class="details-page-actions" data-toggle="dropdown">
+						<i data-feather="more-vertical"></i>
+					</a>
+					<div class="dropdown-menu">
+						<a class="dropdown-item" @@click="openModal" href="#">Edit</a>
+					</div>
+				</div>
+			</div>
+			<hr class="hr-description">
+			<div class="row no-gutters">
+				<div class="col-fixed-220">
+					<p class="p-sm mb-0">@Localizer["system_first_name"]</p>
+				</div>
+				<div class="d-block mb-sm-0 mb-1">
+					<p class="p-sm mb-0 color-black">@Model.FirstName</p>
+				</div>
+			</div>
+			<div class="row no-gutters">
+				<div class="col-fixed-220">
+					<p class="p-sm mb-0">@Localizer["system_last_name"]</p>
+				</div>
+				<div class="d-block mb-sm-0 mb-1">
+					<p class="p-sm mb-0 color-black">@Model.LastName</p>
+				</div>
+			</div>
+			<div class="row no-gutters">
+				<div class="col-fixed-220">
+					<p class="p-sm mb-0">@Localizer["organization"]</p>
+				</div>
+				<div class="d-block mb-sm-0 mb-1">
+					<p class="p-sm mb-0 color-black">@Model.Organization.Name</p>
+				</div>
+			</div>
+			<h6 class="mt-3">@Localizer["details_contact_details"]</h6>
+			<hr class="hr-description">
+			<div class="row no-gutters">
+				<div class="col-fixed-220">
+					<p class="p-sm mb-0">@Localizer["details_email"]</p>
+				</div>
+				<div class="d-block mb-sm-0 mb-1">
+					<p class="p-sm mb-0 color-black">@Model.Email</p>
+				</div>
+			</div>
+			<div class="row no-gutters">
+				<div class="col-fixed-220">
+					<p class="p-sm mb-0">@Localizer["details_phone"]</p>
+				</div>
+				<div class="d-block mb-sm-0 mb-1">
+					<p class="p-sm mb-0 color-black">@Model.Phone</p>
+				</div>
+			</div>
+			<div class="row no-gutters">
+				<div class="col-fixed-220">
+					<p class="p-sm mb-0">@Localizer["details_job_position"]</p>
+				</div>
+				<div class="d-block mb-sm-0 mb-1">
+					<p class="p-sm mb-0 color-black">@Model.JobPosition?.Name</p>
+				</div>
+			</div>
+			<h6 class="mt-3">@Localizer["details_description"]</h6>
+			<hr class="hr-description">
+			<div class="row no-gutters">
+				<div class="d-block mb-sm-0 mb-1">
+					<p class="p-sm mb-0 color-black">@Model.Description</p>
+				</div>
+			</div>
+			<ContactModalForm ref="modals" :editable="true" @@action="modalAction" />
+		</div>
+	</script>
+	<script>
+		Vue.component('ContactDetails', {
+			template: '#page-template',
+			beforeCreate() {
+				const breadcrumbs = [
+					'Clients',
+					'<a href="/contact">Contacts</a>',
+					`@Model.FirstName @Model.LastName`
+				]
+				this.$store.dispatch("setCustomBreadcrumbsAction", breadcrumbs);
+			},
+			mounted() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+			},
+			methods: {
+				openModal() {
+					this.$refs['modals'].editContact('@Model.Id');
+				},
+				modalAction() {
+					location.reload();
+				}
+			}
+		});
+	</script>
+}

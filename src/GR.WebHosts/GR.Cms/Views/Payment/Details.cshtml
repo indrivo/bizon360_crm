@@ -1,0 +1,93 @@
+@using GR.Core.Extensions;
+@using GR.Crm.Payments.Abstractions.ViewModels.PaymentsViewModels
+@model GetPaymentViewModel
+
+
+@{
+	ViewData["Title"] = "Payment details";
+}
+
+<div class="col-lg-6 bg-white border rounded py-15 px-20 ml-40px">
+	<h6>@Localizer["details_overview"]</h6>
+	<hr class="hr-description">
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["details_date"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Payment.DateTransaction.ToString("dd.MM.yyyy")</p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["details_amount"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Payment?.TotalPrice @Model.Payment?.Currency</p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["organization"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Organization?.Name</p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["details_product"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Product?.Name</p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["details_idno"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Payment?.FiscalCode</p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["details_doc_number"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Payment?.DocumentNumber</p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["details_bank_account"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1">
+			<p class="p-sm mb-0 color-black">@Model.Payment?.BankAccount</p>
+		</div>
+	</div>
+	<div class="row no-gutters">
+		<div class="col-fixed-220">
+			<p class="p-sm mb-0">@Localizer["system_payment destination"]</p>
+		</div>
+		<div class="d-block mb-sm-0 mb-1 col">
+			<p class="p-sm mb-0 color-black">@Model.Payment.PaymentDestination</p>
+		</div>
+	</div>
+</div>
+<DetailsCrumbs />
+
+@section Scripts {
+	<script>
+		Vue.component('DetailsCrumbs', {
+			template: '',
+			beforeCreate() {
+				const breadcrumbs = [
+					`<a href="/payments">Payments</a>`,
+					'Payment details'
+				]
+				this.$store.dispatch("setCustomBreadcrumbsAction", breadcrumbs);
+			}
+		});
+		</script>
+}

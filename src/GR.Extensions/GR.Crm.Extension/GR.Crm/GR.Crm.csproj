@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Configuration\currencies.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration\currencies.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="2.10.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\GR.Audit.Extension\GR.Audit\GR.Audit.csproj" />
+    <ProjectReference Include="..\GR.Crm.Abstractions\GR.Crm.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.Contracts\GR.Crm.Contracts.Abstractions\GR.Crm.Contracts.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.Leads\GR.Crm.Leads.Abstractions\GR.Crm.Leads.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.Organizations\GR.Crm.Organizations.Abstractions\GR.Crm.Organizations.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.Payments\GR.Crm.Payments.Abstractions\GR.Crm.Payments.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.PipeLines\GR.Crm.PipeLines.Abstractions\GR.Crm.PipeLines.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.Reports\GR.Crm.Reports.Abstraction\GR.Crm.Reports.Abstraction.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.Teams\GR.Crm.Teams.Abstractions\GR.Crm.Teams.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Extensions\GR.Crm.Teams\GR.Crm.Teams.Implementation\GR.Crm.Teams.Implementation.csproj" />
+  </ItemGroup>
+
+</Project>

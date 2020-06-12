@@ -1,0 +1,433 @@
+@{
+	ViewData["Title"] = "Lead states";
+}
+
+@section  Styles {
+<style>
+	#state-styleClass ~ .dropdown-toggle .filter-option-inner-inner {
+		height: 18px;
+		padding-top: 0;
+	}
+	#state-styleClass ~ .dropdown-toggle .badge {
+		top: 0;
+	}
+</style>
+}
+
+<LeadStates />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/textBlock.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('LeadStates', {
+			template: `
+					<div>
+						<PageOptionsBar :pageOptionsComponents="pageOptionsComponents"/>
+						<div>
+							<Table
+								:fields="tableFields"
+								:apiUrl="apiUrl"
+								:httpMethod="httpMethod"
+								@@triggeredMenuAction="action"
+								@@onLoad="tableLoad"
+								tableId="contacts-table"
+								:sortOrder="tableConfig.sortCol"
+								:customQueryparams="customQueryparams"
+								:hasCustomQUeryparams="true"
+								:initialPageSize="20"
+								:reload="tableKey"
+								dataPath="result"
+								:actionsSingle="tableActions.single"
+								:actionsSingleDisabled="tableActions.singleDisabled"
+								:actionsSingleSystem="tableActions.singleSystem"
+								:actionsMultiple="tableActions.multiple"
+								:actionsMultipleDisabled="tableActions.multipleDisabled"
+								:haveContextMenu="true"
+							>
+								<slot  slot="name" slot-scope="props">
+									<span class="badge" :class="'badge-' + props.rowData.stateStyleClass">{{ props.rowData.name }}</span>
+								</slot>
+							</Table>
+						</div>
+						<Modal :refreshInputs="refreshInputs" :modalProps="modalProps" @@newValue="emitModalValue" :inputsKey="modalKey"/>
+					</div>`
+			,
+			data() {
+				return {
+					modalKey: 0,
+					apiUrl: apiEndpoints.Leads.GetAllLeadStates,
+					httpMethod: 'get',
+					tableFields: [
+						{
+							name: 'name',
+							title: 'Name',
+							sortField: 'name',
+							visible: true
+						},
+						{
+							name: 'description',
+							title: 'Description',
+							sortField: 'description',
+							visible: true
+						},
+						{
+							name: 'isDeleted',
+							title: `Status`,
+							sortField: 'isDeleted',
+							visible: true
+						}
+					],
+					allAgreements: [],
+					contractTemplatesSelect: [],
+					leadsSelect: [],
+					organisationsSelect: [],
+					organisationAddressesSelect: [],
+					organisationContactsSelect: [],
+					usersSelect: [],
+					productsSelect: [],
+					searchString: null,
+					modalValues: {},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add state',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableModal = false;
+									this.resetModalValues();
+									this.modalKey++;
+									this.refreshInputs++;
+									$(`#${this.modalProps.id}`).modal("show");
+								}
+							}
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'name',
+								sortField: 'name',
+								direction: 'asc'
+							}
+						]
+					},
+					tableActions: {
+						single: {
+							"details": { name: "Details", icon: "details" },
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						singleSystem: {
+							"details": { name: "Details", icon: "details" },
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					tableData: [],
+					waitAddButton: false,
+					editableModal: false,
+					refreshInputs: 0,
+					stylesSelect: [
+						{
+							dataContent: '<span class="badge badge-danger">Danger</span>',
+							value: 'danger'
+						},
+						{
+							dataContent: '<span class="badge badge-warning">Warning</span>',
+							value: 'warning'
+						},
+						{
+							dataContent: '<span class="badge badge-success">Success</span>',
+							value: 'success'
+						},
+						{
+							dataContent: '<span class="badge badge-info">Info</span>',
+							value: 'info'
+						},
+						{
+							dataContent: '<span class="badge badge-primary">Primary</span>',
+							value: 'primary'
+						},
+						{
+							dataContent: '<span class="badge badge-purple">Purple</span>',
+							value: 'purple'
+						},
+						{
+							dataContent: '<span class="badge badge-dark">Dark</span>',
+							value: 'dark'
+						},
+						{
+							dataContent: '<span class="badge badge-secondary">Secondary</span>',
+							value: 'secondary'
+						},
+						{
+							dataContent: '<span class="badge badge-light">Light</span>',
+							value: 'light'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-danger">Danger</span>',
+							value: 'outline-danger'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-warning">Warning</span>',
+							value: 'outline-warning'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-success">Success</span>',
+							value: 'outline-success'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-info">Info</span>',
+							value: 'outline-info'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-primary">Primary</span>',
+							value: 'outline-primary'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-purple">Purple</span>',
+							value: 'outline-purple'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-dark">Dark</span>',
+							value: 'outline-dark'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-secondary">Secondary</span>',
+							value: 'outline-secondary'
+						},
+						{
+							dataContent: '<span class="badge badge-outline-light">Light</span>',
+							value: 'outline-light'
+						}
+					]
+				};
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						'includeDeleted': true
+					}
+				},
+				modalLabel() {
+					return this.editableModal ? 'Edit state' : 'Add state';
+				},
+				modalProps() {
+					return {
+						id: 'contactModal',
+						label: this.modalLabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'state-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									className: 'col-12',
+									value: this.modalValues.name,
+									validator: value => fieldValidationFunc(value, 'varChar128'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar128')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'state-styleClass',
+									label: 'State style',
+									options: this.stylesSelect,
+									className: 'col-12',
+									size: 10,
+									value: this.modalValues.styleClass
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'state-description',
+									label: 'Description',
+									value: this.modalValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							if (!this.editableModal) {
+								this.addNewEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							} else {
+								this.updateEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				}
+			},
+			created() {
+				this.resetModalValues();
+			},
+			methods: {
+				async addNewEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.AddLeadState, 'PUT', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.RenameLeadState, 'POST', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Leads.DisableLeadState, 'DELETE', { leadStateId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Leads.ActivateLeadState, 'DELETE', { leadStateId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Leads.RemoveLeadState, 'DELETE', { leadStateId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				tableLoad(data) {
+					this.tableData = data;
+				},
+				loadEntity(entityId) {
+					return this.findObjectByPropValue(this.tableData, entityId, 'id');
+				},
+				editEntity(entityId) {
+					const entity = this.loadEntity(entityId);
+					this.modalValues = {
+						leadStateId: entity.id,
+						name: entity.name,
+						styleClass: entity.stateStyleClass,
+						description: entity.description
+					}
+					this.editableModal = true;
+					this.modalKey++;
+					this.refreshInputs++;
+					$(`#${this.modalProps.id}`).modal("show");
+				},
+				resetModalValues() {
+					this.modalValues = {
+						name: null,
+						styleClass: null,
+						description: null
+					}
+				},
+				emitModalValue(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.modalValues[val.id.replace('state-', '')] = newVal;
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateEntities(action.value);
+							break;
+						} case 'activate': {
+							this.activateEntities(action.value);
+							break;
+						} case 'edit': {
+							this.editEntity(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteEntities(action.value);
+							break;
+						} case 'details': {
+							window.location.href = '/leads/leadStatusDetails?id=' + action.value[0];
+							break;
+						}
+					}
+				},
+				findObjectByPropValue: (array, value, prop) => {
+					return array.find(x => x[prop] === value);
+				}
+			}
+		});
+
+	</script>
+}

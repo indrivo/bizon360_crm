@@ -1,0 +1,702 @@
+@model IEnumerable<GR.Identity.Razor.Users.ViewModels.UserViewModels.UserListItemViewModel>
+
+@inject IStringLocalizer Localizer
+@{
+	ViewData["Title"] = Localizer["users"];
+}
+
+<UsersList />
+
+@section Scripts {
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('UsersList', {
+			template: `
+				<div>
+					<PageOptionsBar
+						v-if="showFilters"
+						:searcheable="true"
+						:pageOptionsComponents="pageOptionsComponents"
+						@@searchInput="searchTable"
+						:filters="tableFilters"
+						@@filterResult="filterResult"
+					/>
+					<Table
+							:fields="tableFields"
+							:apiUrl="apiUrl"
+							:httpMethod="httpMethod"
+							@@triggeredMenuAction="action"
+							@@onLoad="tableDataLoaded"
+							tableId="users-table"
+							:sortOrder="tableConfig.sortCol"
+							:initialPageSize="20"
+							:reload="tableKey"
+							dataPath="result.result"
+							:customQueryparams="customQueryparams"
+							:hasCustomQUeryparams="true"
+							:actionsSingle="tableActions.single"
+							:actionsSingleDisabled="tableActions.singleDisabled"
+							:actionsMultiple="tableActions.multiple"
+							:actionsMultipleDisabled="tableActions.multipleDisabled"
+							:haveContextMenu="true"
+						>
+							<slot slot="userFirstName" slot-scope="props">
+								{{ props.rowData.userFirstName ? props.rowData.userFirstName : '' }}
+								{{ props.rowData.userLastName ? props.rowData.userLastName : '' }}
+							</slot>
+							<slot slot="userRoles" slot-scope="props">
+								<template v-for="role in props.rowData.userRoles">
+									<p v-if="role" class="m-0 last-child-mb-2" :key="role.id">
+										{{ role.name }}
+									</p>
+								</template>
+							</slot>
+							<slot slot="isDisabled" slot-scope="props">
+								<span v-if="props.rowData.isDisabled" class="badge badge-outline-secondary">Inactive</span>
+								<span v-else class="badge badge-outline-success">Active</span>
+							</slot>
+						</Table>
+					<Modal :modalProps="modalUserProps" @@newValue="emitValueUser" :refreshInputs="refreshInputs" :inputsKey="modalKey"/>
+					<Modal :modalProps="modalInviteProps" @@newValue="emitInviteUser" :refreshInputs="refreshInputs" :inputsKey="modalInviteKey"/>
+				</div>
+			`,
+			data() {
+				return {
+					apiUrl: apiEndpoints.Users.GetPaginatedUser,
+					httpMethod: 'post',
+					tableKey: 0,
+					modalKey: 0,
+					modalInviteKey: 0,
+					refreshInputs: 0,
+					refreshNewMemberInputs: 0,
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'userFirstName',
+								sortField: 'userFirstName',
+								direction: 'asc'
+							}
+						]
+					},
+					tableFields: [
+						{
+							name: 'userFirstName',
+							title: 'Name',
+							sortField: 'userFirstName',
+							visible: true
+						},
+						{
+							name: 'email',
+							title: 'Email',
+							visible: true
+						},
+						{
+							name: 'userRoles',
+							title: 'Roles',
+							visible: true
+						},
+						{
+							name: 'isDisabled',
+							title: 'Status',
+							visible: true
+						}
+					],
+					searchString: '',
+					tableActions: {
+						single: {
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					editableUserModal: false,
+					waitAddButton: false,
+					waitInviteAddButton: false,
+					userValues: {},
+					showFilters: false,
+					inviteValues: {},
+					pageRequestFilters: [],
+					userRoles: [],
+					jobPositions: [],
+					users: []
+				}
+			},
+			created() {
+				this.resetUserValues();
+				this.refreshInputs++;
+				customAjaxRequest(apiEndpoints.Roles.GetAllRolesAsync).then(roles => {
+					this.userRoles = this.convertToSelectList(roles);
+					this.showFilters = true;
+				});
+				customAjaxRequest(apiEndpoints.JobPosition.GetAllJobPositions).then(result => {
+					this.jobPositions = this.convertToSelectList(result);
+				});
+			},
+			computed: {
+				customQueryparams() {
+					const params = {
+						gSearch: this.searchString,
+						includeDeleted: true
+					};
+					this.pageRequestFilters.forEach((a,i) => {
+						for (pv in a) {
+							params[`pageRequestFilters[${i}][${pv}]`] = a[pv];
+						}
+					});
+					return params;
+				},
+				pageOptionsComponents() {
+					return [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add user',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableUserModal = false;
+									this.resetUserValues();
+									this.modalKey++;
+									this.refreshInputs++;
+									$(`#${this.modalUserProps.id}`).modal("show");
+								}
+							}
+						},
+						{
+							name: 'Button',
+							props: {
+								label: 'Invite user',
+								className: 'ml-2',
+								btnType: 'success',
+								onClick: () => {
+									this.resetInviteValues();
+									this.modalInviteKey++;
+									$(`#${this.modalInviteProps.id}`).modal("show");
+								}
+							}
+						}
+					]
+				},
+				userFormSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalUserProps.id}`).modal("hide");
+								}
+							}
+						}
+					];
+					if (!this.editableUserModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalUserlabel() {
+					return this.editableUserModal ? 'Edit user' : 'Add user';
+				},
+				modalUserProps() {
+					return {
+						id: 'userModal',
+						label: this.modalUserlabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'user-firstName',
+									type: 'text',
+									label: 'First name',
+									required: true,
+									value: this.userValues.firstName,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'varChar50'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar50')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'user-lastName',
+									type: 'text',
+									label: 'Last name',
+									required: true,
+									value: this.userValues.lastName,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'varChar50'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar50')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'user-email',
+									type: 'text',
+									label: 'Email',
+									required: true,
+									value: this.userValues.email,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'email'),
+									validatorInput: value => fieldValidationInputFunc(value, 'email')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'user-phoneNumber',
+									type: 'text',
+									label: 'Phone',
+									required: true,
+									value: this.userValues.phoneNumber,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'phone'),
+									validatorInput: value => fieldValidationInputFunc(value, 'phone')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'user-password',
+									type: 'password',
+									label: 'Password',
+									required: !this.editableUserModal,
+									value: this.userValues.password,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'password')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'user-repeatPassword',
+									type: 'password',
+									label: 'Confirm password',
+									required: !this.editableUserModal,
+									value: this.userValues.repeatPassword,
+									className: 'col-12 col-md-6',
+									validator: value => { return value === this.userValues.password ? true : window.translate('system_field_invalid_repeat_password') }
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'user-isDeleted',
+									label: 'Status',
+									options: [
+										{
+											label: 'Active',
+											value: 'false',
+										},
+										{
+											label: 'Inactive',
+											value: 'true'
+										}
+									],
+									required: true,
+									value: this.userValues.isDeleted,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'user-selectedRoleId',
+									label: 'Roles',
+									options: this.userRoles,
+									multiple: true,
+									required: true,
+									value: this.userValues.selectedRoleId,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'user-jobPositionId',
+									label: 'Job position',
+									options: this.jobPositions,
+									required: true,
+									value: this.userValues.jobPositionId,
+									className: 'col-12'
+								}
+							},
+						],
+						formSubmits: this.userFormSubmits,
+						onSubmit: () => {
+							if (this.editableUserModal) {
+								this.updateUser().then(() => {
+									$(`#${this.modalUserProps.id}`).modal("hide");
+								});
+							} else {
+								this.addNewUser().then(() => {
+									$(`#${this.modalUserProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+				modalInviteProps() {
+					return {
+						id: 'inviteModal',
+						label: 'Invite user',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'invite-firstName',
+									type: 'text',
+									label: 'First name',
+									required: true,
+									value: this.userValues.firstName,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'varChar50'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar50')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'invite-lastName',
+									type: 'text',
+									label: 'Last name',
+									required: true,
+									value: this.userValues.lastName,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'varChar50'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar50')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'invite-email',
+									type: 'text',
+									label: 'Email',
+									required: true,
+									value: this.userValues.email,
+									className: 'col-12',
+									validator: value => fieldValidationFunc(value, 'email'),
+									validatorInput: value => fieldValidationInputFunc(value, 'email')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'invite-roles',
+									label: 'Roles',
+									options: this.userRoles,
+									multiple: true,
+									required: true,
+									value: this.inviteValues.roles,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalInviteProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Invite user',
+									btnType: 'success',
+									waiting: this.waitInviteAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.inviteUser().finally(() => {
+								$(`#${this.modalInviteProps.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				rolesListFilter() {
+					let newArray = [];
+					this.userRoles.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				tableFilters() {
+					return [
+						{
+							id: 'Role',
+							label: 'Role',
+							values: this.rolesListFilter
+						},
+						{
+							id: 'IsDeleted',
+							label: 'Status',
+							values: [
+								{
+									label: 'Active',
+									value: false,
+									active: false
+								},
+								{
+									label: 'Inactive',
+									value: true,
+									active: false
+								}
+							]
+						}
+					]
+				},
+			},
+			methods: {
+				async addNewUser() {
+					this.waitAddButton = true;
+					this.userValues.userName = this.userValues.email.split("@@")[0]
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Users.AddUser, 'PUT', this.userValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deleteUsers(users) {
+					users.forEach((id, i, a) => {
+						customAjaxRequest(apiEndpoints.Users.DeleteUser, 'DELETE', { id }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deactivateUsers(users) {
+					users.forEach((userId, i, a) => {
+						customAjaxRequest(apiEndpoints.Users.DeactivateUser, 'POST', { userId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateUsers(users) {
+					users.forEach((userId, i, a) => {
+						customAjaxRequest(apiEndpoints.Users.ActivateUser, 'GET', { userId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async inviteUser() {
+					this.waitInviteAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Users.InviteNewUserAsync, 'POST', this.inviteValues).then(() => {
+							this.tableKey++;
+							toast.notify
+							resolve(true);
+						}).catch(e => {
+							toast.notify({ heading: 'Email sent', icon: "success" });
+							reject(false);
+						}).finally(() => {
+							this.waitInviteAddButton = false;
+						});
+					});
+				},
+				async updateUser() {
+					this.waitAddButton = true;
+					if (!this.userValues.password) {
+						delete this.userValues.password;
+						delete this.userValues.repeatPassword;
+					}
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Users.UpdateUser, 'POST', this.userValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async loadUser(userId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Users.GetUserById, 'GET', {userId}).then(result => {
+							this.tableKey++;
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				editUser(userId) {
+					this.resetUserValues();
+					this.loadUser(userId).then(user => {
+						this.userValues.id = user.id;
+						this.userValues.firstName = user.userFirstName;
+						this.userValues.lastName = user.userLastName;
+						this.userValues.email = user.email;
+						this.userValues.phoneNumber = user.phoneNumber;
+						this.userValues.isDeleted = user.isDeleted;
+						this.userValues.selectedRoleId = user.userRolesId;
+						this.userValues.jobPositionId = user.jobPositionId;
+						this.userValues.userName = user.userName;
+						this.editableUserModal = true;
+						this.modalKey++;
+						this.refreshInputs++;
+						$(`#${this.modalUserProps.id}`).modal("show");
+					})
+				},
+				emitValueUser(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.userValues[val.id.replace('user-', '')] = newVal;
+				},
+				emitInviteUser(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.inviteValues[val.id.replace('invite-', '')] = newVal;
+				},
+				resetUserValues() {
+					this.userValues =  {
+						firstName: null,
+						lastName: null,
+						email: null,
+						phoneNumber: null,
+						password: null,
+						repeatPassword: null,
+						isDeleted: false,
+						selectedRoleId: [],
+						jobPositionId: null,
+						authenticationType: 'local',
+						userName: null
+					}
+				},
+				resetInviteValues() {
+					this.inviteValues = {
+						email: null,
+						roles: [],
+						firstName: null,
+						lastName: null
+					}
+				},
+				findObjectByPropValue(array, value, prop) {
+					return array.find(x => x[prop] === value);
+				},
+				changeObjPropInArrayById(array, value, prop, id, idProp) {
+					for (var i in array) {
+						if (array[i][idProp] == id) {
+							array[i][prop] = value;
+							break;
+						}
+					}
+				},
+				action(action) {
+					if (action.key == 'deactivate') {
+						this.deactivateUsers(action.value);
+					} else if (action.key == 'activate') {
+						this.activateUsers(action.value);
+					} else if (action.key == 'edit') {
+						this.editUser(action.value[0]);
+					} else if (action.key == 'delete') {
+						this.deleteUsers(action.value);
+					}
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				},
+				tableDataLoaded(data) {
+					this.users = data;
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: v.value
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				}
+			}
+		});
+	</script>
+}

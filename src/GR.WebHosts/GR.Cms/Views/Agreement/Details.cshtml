@@ -1,0 +1,172 @@
+@using GR.Core.Extensions;
+@using GR.Crm.Leads.Abstractions.ViewModels.AgreementsViewModels;
+@model GetAgreementViewModel
+
+@{
+	ViewData["Title"] = Model.Name;
+}
+
+<AgreementDetails />
+
+@section Scripts {
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/textBlock.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/themes/gear/js/modalForms/agreementModalForm.js"></script>
+	<script id="page-template" type="text/x-template">
+		<div class="position-relative">
+			<div v-show="!dataLoaded" class="section-loader"><Loader /></div>
+			<div class="col-lg-6 bg-white border rounded py-15 px-20 ml-40px">
+				<div class="d-flex">
+					<h6>@Localizer["details_overview"]</h6>
+					<div class="ml-auto">
+						<a href="#" class="details-page-actions" data-toggle="dropdown">
+							<i data-feather="more-vertical"></i>
+						</a>
+						<div class="dropdown-menu">
+							<a class="dropdown-item" @@click="openModal" href="#">Edit</a>
+						</div>
+					</div>
+				</div>
+				<hr class="hr-description">
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["system_details_name"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["system_details_template"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">{{ templateName }}</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_lead"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Lead?.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["organization"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Organization?.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_org_address"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.OrganizationAddress?.City?.Region?.Name, @Model.OrganizationAddress?.City?.Name, @Model.OrganizationAddress?.Street, @Model.OrganizationAddress?.Zip</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_contact"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Contact?.FirstName @Model.Contact?.LastName</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_commision"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Commission</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_responsible"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">{{ username }}</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_product"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Product?.Name</p>
+					</div>
+				</div>
+				<h6 class="mt-3">@Localizer["details_description"]</h6>
+				<hr class="hr-description">
+				<div class="row no-gutters">
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black"> @Html.Raw(Model.Description)</p>
+					</div>
+				</div>
+			</div>
+			<AgreementModalForm ref="modals" :editable="true" @@action="modalAction"/>
+		</div>
+	</script>
+	<script>
+	Vue.component('AgreementDetails', {
+		template: `#page-template`,
+		data() {
+			return {
+				contractTemplateId: '@Model.ContractTemplateId',
+				templateName: '',
+				userId: '@Model.UserId',
+				user: '',
+				dataLoaded: false,
+				modalKey: 0,
+				refreshInputs: 0
+			}
+		},
+		computed: {
+			username() {
+				const user = this.user;
+				return user.userFirstName ? `${user.userFirstName} ${user.userLastName}` : user.userName;
+			}
+		},
+		beforeCreate() {
+			const breadcrumbs = [
+				'<a href="/agreement">Agreements</a>',
+				'@Model.Name'
+			]
+			this.$store.dispatch("setCustomBreadcrumbsAction", breadcrumbs);
+		},
+		created() {
+			const promises = [
+				customAjaxRequest(apiEndpoints.Contract.FindContractTemplateById, 'GET', { contractTemplateId: this.contractTemplateId }),
+				customAjaxRequest(apiEndpoints.Users.GetUserById, 'GET', { userId: this.userId })
+			];
+			Promise.all(promises).then(r => {
+				this.templateName = r[0].name;
+				this.user = r[1];
+			}).finally(() => {
+				this.dataLoaded = true;
+			});
+		},
+		mounted() {
+			feather.replace({
+				width: 17,
+				height: 17,
+			});
+		},
+		methods: {
+			openModal() {
+				this.$refs['modals'].editEntity('@Model.Id');
+			},
+			modalAction() {
+				location.reload();
+			}
+		}
+	});
+	</script>
+}

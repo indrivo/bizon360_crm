@@ -1,0 +1,18 @@
+{
+  "IsLayout": false,
+  "LayoutId": "587592ed-cd11-432e-b689-a5fce2a9859c",
+  "Settings": {
+    "Name": "Index",
+    "Description": "Index page",
+    "Title": "Index",
+    "Identifier": "index"
+  },
+  "Path": "/index",
+  "IsSystem": true,
+  "PageStyles": [
+
+  ],
+  "PageScripts": [
+
+  ]
+}

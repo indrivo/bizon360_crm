@@ -1,0 +1,719 @@
+@{
+	ViewData["Title"] = "Payments";
+}
+
+<Payments />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/file.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		const taskDateFormat = 'YYYY/MM/DD';
+		const taskDatePickerFormat = 'yyyy/mm/dd';
+		Vue.component('Payments', {
+			template: `
+					<div>
+						<div v-show="!loadTable" class="page-loader"><Loader/></div>
+						<PageOptionsBar
+							v-if="showFilters"
+							:searcheable="true"
+							:pageOptionsComponents="pageOptionsComponents"
+							@@searchInput="searchTable"
+							:filters="tableFilters"
+							@@filterResult="filterResult"
+						/>
+						<div>
+							<Table
+								:fields="tableFields"
+								:apiUrl="apiUrl"
+								:httpMethod="httpMethod"
+								@@triggeredMenuAction="action"
+								@@onLoad="tableLoad"
+								tableId="contacts-table"
+								:sortOrder="tableConfig.sortCol"
+								:customQueryparams="customQueryparams"
+								:hasCustomQUeryparams="true"
+								:initialPageSize="20"
+								:reload="tableKey"
+								dataPath="result.result"
+								:actionsSingle="tableActions.single"
+								:actionsSingleDisabled="tableActions.singleDisabled"
+								:actionsMultiple="tableActions.multiple"
+								:actionsMultipleDisabled="tableActions.multipleDisabled"
+								:haveContextMenu="true"
+							>
+								<slot slot="amount" slot-scope="props">
+									{{ props.rowData.payment ? props.rowData.payment.totalPrice + props.rowData.payment.currency : '' }}
+								</slot>
+								<slot slot="product" slot-scope="props">
+									{{ props.rowData.product ? props.rowData.product.name : '' }}
+								</slot>
+								<slot slot="idno" slot-scope="props">
+									{{ props.rowData.payment ? props.rowData.payment.fiscalCode : '' }}
+								</slot>
+								<slot slot="organizationName" slot-scope="props">
+									<a v-if="props.rowData.organizationId" :href="'/organizations/details?id=' + props.rowData.organizationId" target="_blank" @@click.stop>
+										{{ props.rowData.organizationName }}
+									</a>
+								</slot>
+								<slot slot="quantity" slot-scope="props">
+									{{ props.rowData.payment ? props.rowData.payment.quantity : '' }}
+								</slot>
+								<slot slot="totalTVA" slot-scope="props">
+									{{ props.rowData.payment ? props.rowData.payment.totalTVA : '' }}
+								</slot>
+								<slot slot="workCategory" slot-scope="props">
+									{{ props.rowData.workCategory ? props.rowData.workCategory.name : '' }}
+								</slot>
+								<slot slot="paymentCode" slot-scope="props">
+									{{ props.rowData.paymentCode ? props.rowData.paymentCode.code : '' }}
+								</slot>
+							</Table>
+						</div>
+						<Modal :refreshInputs="refreshInputs" :modalProps="modalProps" @@newValue="emitModalValue" :inputsKey="modalKey"/>
+						<Modal :modalProps="modalUploadPayments" @@newValue="emitModalUploadValue" :inputsKey="modalDocKey"/>
+					</div>`
+			,
+			data() {
+				return {
+					modalKey: 0,
+					modalDocKey: 0,
+					apiUrl: apiEndpoints.Payments.GetAllPaginatedPayments,
+					httpMethod: 'post',
+					tableFields: [
+						{
+							name: 'paymentDate',
+							title: 'Date',
+							sortField: 'paymentDate',
+							visible: true
+						},
+						{
+							name: 'organizationName',
+							title: 'Organization',
+							sortField: 'organizationName',
+							visible: true
+						},
+						{
+							name: 'workCategory',
+							title: 'Work category',
+							visible: true
+						},
+						{
+							name: 'idno',
+							title: 'IDNO',
+							visible: true
+						},
+						{
+							name: 'paymentCode',
+							title: 'Payment code',
+							visible: true
+						},
+						{
+							name: 'quantity',
+							title: `Quanitity`,
+							visible: true
+						},
+						{
+							name: 'totalTVA',
+							title: `Total TVA`,
+							visible: true
+						},
+						{
+							name: 'amount',
+							title: `Total price`,
+							sortField: 'product',
+							visible: true
+						}
+					],
+					dataLoad: false,
+					currenciesListSelect:[],
+					productsSelect: [],
+					searchString: '',
+					modalValues: {},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Upload payments',
+								btnType: 'success',
+								className: 'ml-auto',
+								onClick: () => {
+									this.modalDocKey++;
+									$(`#${this.modalUploadPayments.id}`).modal("show");
+								}
+							}
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: []
+					},
+					tableActions: {
+						single: {
+							"details": { name: "Details", icon: "details" },
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					waitAddButton: false,
+					waitUploadAddButton: false,
+					refreshInputs: 0,
+					pageRequestFilters: [],
+					loadTable: false,
+					showFilters: false,
+					uploadFile: null,
+					paymentCodesSelect: [],
+					paymentCodes: [],
+					workCategoriesSelect: [],
+					geoPositionsSelect: []
+				};
+			},
+			computed: {
+				customQueryparams() {
+					const params = {
+						gSearch: this.searchString,
+						includeDeleted: true
+					};
+					this.pageRequestFilters.forEach((a,i) => {
+						for (pv in a) {
+							params[`pageRequestFilters[${i}][${pv}]`] = a[pv];
+						}
+					});
+					return params;
+				},
+				modalProps() {
+					return {
+						id: 'paymentModal',
+						label: 'Edit payment',
+						formInputs: [
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'payment-dateTransaction',
+									label: 'Date',
+									required: true,
+									format: taskDatePickerFormat,
+									value: this.modalValues.dateTransaction,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'payment-totalPrice',
+									type: 'text',
+									label: 'Total price',
+									required: true,
+									className: 'col-12 col-md-6',
+									value: this.modalValues.totalPrice,
+									validator: value => fieldValidationFunc(value, 'naturalNum'),
+									validatorInput: value => fieldValidationInputFunc(value, 'naturalNum')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'payment-currency',
+									label: 'Currency',
+									options: this.currenciesListSelect,
+									size: 10,
+									required: true,
+									searchable: true,
+									className: 'col-12 col-md-6',
+									value: this.modalValues.currency
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'payment-paymentDestination',
+									type: 'text',
+									label: 'Payment destination',
+									className: 'col-12',
+									value: this.modalValues.paymentDestination,
+									validator: value => fieldValidationFunc(value, 'varChar250'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar250')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'payment-quantity',
+									type: 'text',
+									label: 'Quantity',
+									className: 'col-12',
+									value: this.modalValues.quantity,
+									validator: value => fieldValidationFunc(value, 'naturalNum'),
+									validatorInput: value => fieldValidationInputFunc(value, 'naturalNum')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'payment-unitPriceWithoutTVA',
+									type: 'text',
+									label: 'Unit price without TVA',
+									className: 'col-12 col-md-6',
+									required: true,
+									value: this.modalValues.unitPriceWithoutTVA,
+									validator: value => fieldValidationFunc(value, 'varChar250'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar250')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'payment-TVA',
+									type: 'text',
+									label: 'TVA',
+									className: 'col-12 col-md-6',
+									required: true,
+									value: this.modalValues.TVA,
+									validator: value => fieldValidationFunc(value, 'varChar250'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar250')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'payment-totalTVA',
+									type: 'text',
+									label: 'Total TVA',
+									className: 'col-12',
+									required: true,
+									value: this.modalValues.totalTVA,
+									validator: value => fieldValidationFunc(value, 'varChar250'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar250')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'payment-paymentCodeId',
+									label: 'Payment Code',
+									className: 'col-12',
+									required: true,
+									options: this.paymentCodesSelect,
+									size: 10,
+									value: this.modalValues.paymentCodeId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'payment-organizationId',
+									label: 'Organization',
+									options: this.organizationsSelect,
+									size: 10,
+									required: true,
+									searchable: true,
+									className: 'col-12 col-md-6',
+									value: this.modalValues.organizationId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'payment-workCategoryId',
+									label: 'Product',
+									options: this.workCategoriesSelect,
+									size: 10,
+									searchable: true,
+									required: true,
+									className: 'col-12 col-md-6',
+									value: this.modalValues.workCategoryId
+								}
+							},
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.updateEntity().then(() => {
+								$(`#${this.modalProps.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				modalUploadPayments() {
+					return {
+						id: 'paymentUploadModal',
+						label: 'Upload payments',
+						formInputs: [
+							{
+								name: 'File',
+								props: {
+									id: 'paymentUpload-file',
+									label: 'File (.xml)',
+									required: true,
+									className: 'col-12',
+									acceptedExtensions: '.xml'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalUploadPayments.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Upload',
+									btnType: 'success',
+									waiting: this.waitUploadAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.uploadPayments().then(() => {
+								$(`#${this.modalUploadPayments.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				workCategoriesListFilter() {
+					let newArray = [];
+					this.workCategoriesSelect.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				geoPositionsFilter() {
+					let newArray = [];
+					this.geoPositionsSelect.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				paymentCodesFilter() {
+					let newArray = [];
+					this.paymentCodes.forEach(e => {
+						let newElem = {
+							active: false,
+							label: e.code,
+							value: e.id
+						};
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				tableFilters() {
+					return [
+						{
+							id: 'WorkCategoryId',
+							label: 'Work category',
+							values: this.workCategoriesListFilter
+						},
+						{
+							id: 'period',
+							label: 'Period',
+							idStartDate: 'StartDate',
+							idEndDate: 'EndDate',
+							isDateRange: true,
+							values: [
+								{
+									active: false,
+									label: 'Start date',
+									value: 'Start date'
+								},
+								{
+									active: false,
+									label: 'End date',
+									value: 'End date'
+								}
+							]
+						},
+						{
+							id: 'GeoPosition',
+							label: 'Geo position',
+							values: this.geoPositionsFilter
+						},
+						{
+							id: 'paymentCodeId',
+							label: 'Payment code',
+							values: this.paymentCodesFilter
+						}
+					]
+				},
+			},
+			created() {
+				this.resetModalValues();
+				const promises = [
+					customAjaxRequest(apiEndpoints.CrmCommon.GetAllCurrencies),
+					customAjaxRequest(apiEndpoints.Organization.GetAllOrganization),
+					customAjaxRequest(apiEndpoints.PaymentCode.GetAllPaymentCode),
+					customAjaxRequest(apiEndpoints.WorkCategory.GetAllWorkCategories),
+					customAjaxRequest(apiEndpoints.OrganizationAddress.GetGeoPosition)
+				];
+				Promise.all(promises).then(result => {
+					this.currenciesListSelect = this.convertCurrenciesToSelectList(result[0]);
+					this.organizationsSelect = this.convertToSelectList(result[1]);
+					this.paymentCodesSelect = this.convertToSelectList(result[2]);
+					this.paymentCodes = result[2];
+					this.workCategoriesSelect = this.convertToSelectList(result[3]);
+					this.geoPositionsSelect = this.convertGEOToSelectList(result[4]);
+					this.showFilters = true;
+				});
+			},
+			methods: {
+				async uploadPayments() {
+					this.waitUploadAddButton = true;
+					return new Promise((resolve, reject) => {
+						$.ajax({
+							url: apiEndpoints.Payments.ImportXml,
+							data: this.uploadFile,
+							processData: false,
+							contentType: false,
+							type: "POST",
+							success: (data) => {
+								resolve(data);
+								this.waitUploadAddButton = false;
+								this.tableKey++;
+							},
+							error: (e) => {
+								this.waitUploadAddButton = false;
+								toast.notifyErrorList(e);
+								reject(e);
+							}
+						});
+					});
+				},
+				async updateEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Payments.UpdatePayment, 'POST', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Payments.DisablePayment, 'POST', { paymentId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Payments.ActivatePayment, 'POST', { paymentId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Payments.DeletePayment, 'DELETE', { paymentId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadEntity(entityId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Payments.GetPaymentById, 'GET', { paymentId: entityId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				editEntity(entityId) {
+					this.loadEntity(entityId).then(result => {
+						this.editableModal = true;
+						this.modalValues = result.payment;
+						this.modalValues.dateTransaction = moment(result.payment.dateTransaction, 'DD.MM.YYYY').format(taskDateFormat);
+						this.modalValues.organizationId = result.organizationId;
+						this.modalValues.paymentCodeId = result.paymentCodeId;
+						this.modalValues.workCategoryId = result.workCategoryId;
+						this.modalValues.quantity = result.payment.quantity;
+						this.modalValues.unitPriceWithoutTVA = result.payment.unitPriceWithoutTVA;
+						this.modalValues.TVA = result.payment.tva;
+						this.modalValues.totalTVA = result.payment.totalTVA;
+						this.modalValues.id = result.id;
+						this.updateEntityId = entityId;
+						this.modalKey++;
+						this.refreshInputs++;
+						$(`#${this.modalProps.id}`).modal("show");
+					});
+				},
+				resetModalValues() {
+					this.modalValues = {
+						id: null,
+						dateTransaction: null,
+						amount: null,
+						vat: null,
+						totalPrice: null,
+						currency: null,
+						paymentDestination: null,
+						organizationId: null,
+						paymentCodeId: null,
+						quantity: 0,
+						unitPriceWithoutTVA: null,
+						TVA: null,
+						totalTVA: null
+					}
+				},
+				emitModalValue(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.modalValues[val.id.replace('payment-', '')] = newVal;
+				},
+				emitModalUploadValue(val) {
+					let formData = new FormData();
+					formData.append("file", val);
+					this.uploadFile = formData;
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertGEOToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.text,
+							value: e.value
+						}
+						return newObj;
+					});
+				},
+				convertCurrenciesToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: `${e.name}(${e.symbol})`,
+							value: e.code
+						}
+						return newObj;
+					});
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateEntities(action.value);
+							break;
+						} case 'activate': {
+							this.activateEntities(action.value);
+							break;
+						} case 'edit': {
+							this.editEntity(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteEntities(action.value);
+							break;
+						} case 'details': {
+							window.location.href = '/payment/details?id=' + action.value[0];
+							break;
+						}
+					}
+				},
+				findObjectByPropValue: (array, value, prop) => {
+					return array.find(x => x[prop] === value);
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				},
+				setBodyProgressCursor() {
+					$("body").css("cursor", "progress");
+				},
+				unsetBodyProgressCursor() {
+					$("body").css("cursor", "default");
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: v.value
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				},
+				tableLoad() {
+					this.loadTable = true;
+				}
+			}
+		});
+
+	</script>
+}

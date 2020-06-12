@@ -1,0 +1,259 @@
+@inject IStringLocalizer Localizer
+@{
+    ViewData["Title"] = Localizer["pages"];
+}
+
+<div class="card">
+	<div class="card-body">
+		<div class="table-responsive">
+			<div class="mt-2">
+				<div class="d-flex">
+					<div class="mr-auto d-flex flex-row">
+						<div class="form-group">
+							<a asp-action="Create" class="btn btn-primary btn-sm">
+								<i class="mdi mdi-circle-edit-outline mr-2" aria-hidden="true"></i>@Localizer["add_page"]
+							</a>
+						</div>
+						<div class="form-group">
+							<a id="generatePage" href="javascript:void(0)" class="btn btn-primary btn-sm">
+								<i class="mdi mdi-circle-edit-outline mr-2" aria-hidden="true"></i>@Localizer["generate_page"]
+							</a>
+						</div>
+					</div>
+				</div>
+			</div>
+			<table class="table table-striped table-bordered" id="pagTable">
+				<thead>
+                    <tr>
+                        <th>@Localizer["name"]</th>
+                        <th>@Localizer["page_title"]</th>
+                        <th>@Localizer["page_path"]</th>
+                        <th>@Localizer["layout_name"]</th>
+                        <th>@Localizer["description"]</th>
+                        <th>@Localizer["created"]</th>
+                        <th>@Localizer["changed"]</th>
+                        <th>@Localizer["author"]</th>
+                        <th>@Localizer["is_deleted"]</th>
+                        <th>@Localizer["list_actions"]</th>
+                    </tr>
+				</thead>
+				<tbody></tbody>
+				<tfoot></tfoot>
+			</table>
+		</div>
+	</div>
+</div>
+
+
+
+@section Scripts{
+    <script type="text/javascript" language="javascript">
+		function getTokenAntiForgery() {
+			const token = '@Html.AntiForgeryToken()';
+			return $(token).val();
+		}
+	</script>
+    <script type="text/javascript" language="javascript">
+		$(document).ready(function($) {
+
+			const ent = load("/PageRender/GetViewModels");
+			const model = { };
+
+			$.each(ent, function (index, item) {
+				model[item.id] = item.name;
+			});
+
+
+			function generateList() {
+				swal({
+					title: 'Select view model',
+					input: 'select',
+					inputOptions: model,
+					inputPlaceholder: 'required',
+					showCancelButton: true,
+					inputValidator: function (value) {
+						return new Promise(function (resolve, reject) {
+							if (value !== '') {
+								resolve();
+							} else {
+								reject('You need to select an view model!');
+							}
+						});
+					}
+				}).then(function (result) {
+					if (result.value) {
+						setPageName(result.value);
+					}
+				});
+			}
+
+
+			function setPageName(viewModelId) {
+
+				swal({
+					title: 'Set page name',
+					html:
+						'<input id="swal-input1" class="swal2-input">',
+					showCancelButton: true,
+					preConfirm: function () {
+                        return new Promise(function(resolve) {
+                            resolve([
+                                $('#swal-input1').val()
+                            ]);
+                        });
+                    },
+					onOpen: function () {
+                        $('#swal-input1').focus();
+                    }
+				}).then(function (result) {
+					if (result.value) {
+						$.ajax({
+							url: "@Url.Action("GeneratePage")",
+							type: "post",
+							data: {
+								name: result.value,
+								viewModelId: viewModelId
+							},
+							success: function (data) {
+								if (!data) {
+									swal("Fail!", "Internal server error", "error");
+								}
+								else
+									if (data.is_success) {
+										location.reload();
+								}
+							},
+							error: function () {
+								swal("Fail!", "Internal server error", "error");
+							}
+						});
+					}
+				});
+			}
+
+
+			$("#generatePage").on("click", function () {
+				swal({
+					title: 'Select page type',
+					input: 'select',
+					inputOptions: {
+						"1": "List page type"
+					},
+					inputPlaceholder: 'required',
+					showCancelButton: true,
+					inputValidator: function (value) {
+						return new Promise(function (resolve, reject) {
+							if (value !== '') {
+								resolve();
+							} else {
+								reject('You need to select an page type!');
+							}
+						});
+					}
+				}).then(function (result) {
+					if (result.value) {
+						switch (result.value) {
+							case "1": {
+								generateList();
+							} break;
+						}
+					}
+				});
+			});
+
+			const tableId = '#pagTable';
+			if ($.fn.DataTable.isDataTable(tableId)) {
+				alert();
+				$(tableId).dataTable().fnDestroy();
+				$(tableId).dataTable().empty();
+			}
+			$(tableId).DataTable({
+				"language": {
+					"url": `http://cdn.datatables.net/plug-ins/1.10.19/i18n/${window.getCookie("language")}.json`
+				},
+				dom: '<"table_render_pagTable" <"CustomizeColumns">lBfr<"table-responsive"t>ip >',
+				"processing": true, // for show progress bar
+				"serverSide": true, // for process server side
+				"filter": true, // this is for disable filter (search box)
+				"orderMulti": false, // for disable multiple column at once
+				"destroy": true,
+				"ajax": {
+					"url": '@Url.Action("LoadPages")',
+					"type": "POST"
+				},
+				"columns": [
+                    { "data": "settings.name" },
+                    { "data": "settings.title"},
+					{ 
+						"data": "path",
+					 	"render": function(data, type, row, meta) {
+							return `<a href="${row.path}">${row.path}</a>`;
+					 	}
+                    },
+                    { "data": "layout.settings.name" },
+					{ "data": "settings.description" },
+					{ "data": "created" },
+					{ "data": "changed" },
+					{ "data": "author" },
+					{ "data": "isDeleted" },
+					{
+						data: null,
+						"render": function(data, type, row, meta) {
+							return `
+	<div class="btn-group">
+          <button type="button" class="btn btn-info dropdown-toggle table-actions-btn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+            @* ${window.translate("list_actions")} *@
+				<span class="material-icons mr-1 align-middle">more_vert</span>
+          </button>
+          <div class="dropdown-menu">
+           <a class="dropdown-item" href="${row.path}">Preview</a>
+									<a class="dropdown-item" href="@Url.Action("PageBuilder")?pageId=${row.id
+								}">${window.translate("build_page_content")}</a>
+									<a class="dropdown-item" href="@Url.Action("Edit")?pageId=${row.id
+								}">${window.translate("edit_page_settings")}</a>
+									<a class="dropdown-item" href="@Url.Action("GetCode")?id=${row.id
+								}&type=css">${window.translate("edit_page_style")}</a>
+									<a class="dropdown-item" href="@Url.Action("GetCode")?id=${row.id
+								}&type=js">${window.translate("edit_js_code")}</a>
+									<a class="dropdown-item" href="@Url.Action("GetCode")?id=${row.id
+								}&type=html">${window.translate("edit_html")}</a>
+									<a class="dropdown-item" href="@Url.Action("PageScripts")?pageId=${row.id
+								}&type=html">${window.translate("page_scripts")}</a>
+									<a class="dropdown-item" href="@Url.Action("PageStyles")?pageId=${row.id
+                                }&type=html">${window.translate("page_styles")}</a>
+                                    <a class="dropdown-item" href="@Url.Action("PageAcl")?pageId=${row.id
+                                }">${window.translate("system_page_acl")}</a>
+									${(!row.isSystem) ? `<button type="button" class='dropdown-item' onclick=createAlert('${row.id}'); >${window.translate("delete")}</button>`
+								: ``}
+          </div>
+        </div>`;
+						}
+					}
+                ],
+                drawCallback: function () {
+                    if ($('.table_render_pagTable .dataTables_paginate .pagination li').length > 3) {
+                        $('.table_render_pagTable .dataTables_paginate').show();
+                    } else {
+                        $('.table_render_pagTable .dataTables_paginate').hide();
+                    }
+                }
+			});
+		});
+
+		function createAlert(rowId) {
+			const object = {
+				alertTitle: "Delete this page?",
+				alertText: "Are you sure that you want to leave this page?",
+				confirmButtonText: "Yes, delete it!",
+				rowId: rowId,
+				tableId: "#pagTable",
+				urlForDelete: '@Url.Action("Delete")',
+				type: "warning",
+				onDeleteSuccess: "Page has been deleted.",
+				onDeleteFail: "Something wrong",
+				onServerNoResponse: "Api not respond or not have permissions."
+			};
+			DeleteData(object);
+		}
+	</script>
+}

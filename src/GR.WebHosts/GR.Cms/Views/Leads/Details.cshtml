@@ -1,0 +1,468 @@
+@using GR.Core.Extensions;
+@using GR.Crm.Leads.Abstractions.Models;
+@model Lead
+
+@{
+	ViewData["Title"] = Model.Name;
+
+}
+
+<LeadDetails />
+
+@section Scripts {
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/textBlock.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/themes/gear/js/modalForms/leadModalForm.js"></script>
+	<script>
+		const leadObject = JSON.parse(`@Html.Raw(Model.SerializeAsJson())`);
+		Vue.component('Members', {
+			template: `
+				<div class="row no-gutters position-relative align-content-start" style="min-height: 200px">
+					<div v-show="!dataLoaded" class="section-loader"><Loader/></div>
+					<h6>@Localizer["details_owner"]</h6>
+					<hr class="hr-description w-100 mx-0 mb-2">
+					<div class="mb-3 w-100 d-flex" v-if="leadMembers.length > 0">
+						<div class="d-block mb-sm-0 mb-3 mr-2">
+							<a
+								class="btn btn-outline-primary user-rectangle"
+								href="#"
+								:title="owner.firstName + ' ' + owner.lastName"
+							>
+								{{ initials(owner.firstName, owner.lastName) }}
+							</a>
+						</div>
+						<div class="d-block">
+							<h6 class="mb-0">
+								<a href="#">{{owner.firstName + ' ' + owner.lastName}}</a>
+							</h6>
+						</div>
+					</div>
+					<template v-if="members.length > 0">
+						<h6>@Localizer["details_members"]</h6>
+						<hr class="hr-description w-100 mx-0 mb-2">
+						<div class="w-100">
+							<div class="w-100 d-flex mb-2" v-for="m in members" :key="m.id">
+								<div class="d-block mb-sm-0 mb-3 mr-2">
+									<a
+										class="btn btn-outline-primary user-rectangle"
+										href="#"
+										:title="m.firstName + ' ' + m.lastName"
+									>
+										{{ initials(m.firstName, m.lastName) }}
+									</a>
+								</div>
+								<div class="d-block">
+									<h6 class="mb-0">
+										<a href="#">{{m.firstName + ' ' + m.lastName}}</a>
+									</h6>
+								</div>
+							</div>
+						</div>
+					</template>
+				</div>
+			`,
+			data() {
+				return {
+					leadMembers: [],
+					dataLoaded: false,
+					ownerRoleId: "11447a80-eff9-4f68-b24f-353ab2d5ee92"
+				}
+			},
+			computed: {
+				owner() {
+					return this.leadMembers.filter(m => m.teamRoleId == this.ownerRoleId)[0];
+				},
+				members() {
+					return this.leadMembers.filter(m => m.teamRoleId != this.ownerRoleId);
+				}
+			},
+			created() {
+				this.getTeamById(leadObject.team.id).then(team => {
+					this.leadMembers = team.teamMembers;
+					this.dataLoaded = true;
+				});
+			},
+			methods: {
+				async getTeamById(teamId) {
+					return new Promise((res, rej) => {
+						customAjaxRequest(apiEndpoints.Team.GetTeamById, 'GET', { teamId }).then(team => {
+							res(team);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							rej(e);
+						});
+					});
+				},
+				findObjectByPropValue(array, value, prop) {
+					return array.find(x => x[prop] === value);
+				},
+				initials(name, surname) {
+					return name && surname ? `${name.charAt(0)} ${surname.charAt(0)}` : '--';
+				}
+			}
+		});
+		Vue.component('LeadTasks', {
+			template: `
+				<Table v-if="loadTable"
+					:fields="tableFields"
+					className="light-table"
+					:apiUrl="apiUrl"
+					:httpMethod="httpMethod"
+					@@triggeredMenuAction="action"
+					tableId="task-table"
+					:sortOrder="tableConfig.sortCol"
+					:customQueryparams="customQueryparams"
+					:hasCustomQUeryparams="true"
+					:initialPageSize="20"
+					:reload="tableKey"
+					dataPath="result.result"
+					:actionsSingle="tableActions.single"
+					:actionsSingleDisabled="tableActions.singleDisabled"
+					:actionsMultiple="tableActions.multiple"
+					:actionsMultipleDisabled="tableActions.multipleDisabled"
+					:haveContextMenu="true"
+				>
+					<slot slot="assignedUsers" slot-scope="props">
+						<a
+							v-for="member in props.rowData.assignedUsers"
+							:key="member.id"
+							class="btn btn-outline-primary user-rectangle"
+							href="#"
+							@@click.stop.prevent
+							>
+							{{ initials(member.firstName, member.lastName) }}
+						</a>
+					</slot>
+					<slot slot="lead" slot-scope="props">
+						{{ props.rowData.lead ? props.rowData.lead.name : '' }}
+					</slot>
+				</Table>
+			`,
+			data() {
+				return {
+					apiUrl: apiEndpoints.TaskManager.GetTaskByLeadId,
+					httpMethod: 'get',
+					loadTable: false,
+					tableFields: [
+						{
+							name: 'taskPriority',
+							title: 'Priority',
+							visible: true,
+							formatter: value => this.getPriorityBadge(this.taskPriorities[value]),
+							sortField: 'taskPriority'
+						},
+						{
+							name: 'taskNumber',
+							title: 'Number',
+							visible: true,
+							sortField: 'taskNumber',
+						},
+						{
+							name: 'name',
+							title: 'Name',
+							visible: true,
+							sortField: 'name'
+						},
+						{
+							name: 'startDate',
+							title: 'Start date',
+							visible: true,
+							sortField: 'startDate'
+						},
+						{
+							name: 'endDate',
+							title: 'End date',
+							visible: true,
+							sortField: 'endDate'
+						},
+						{
+							name: 'assignedUsers',
+							visible: false,
+							title: 'Assigne',
+							dataClass: 'td-users'
+						},
+						{
+							name: 'status',
+							title: 'Status',
+							visible: true,
+							formatter: value => this.taskStatuses[value].label,
+							sortField: 'status'
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'taskPriority',
+								sortField: 'taskPriority',
+								direction: 'desc'
+							}
+						]
+					},
+					tableActions: {
+						single: {
+							//"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					taskStatuses: [],
+					taskPriorities: []
+				}
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						'leadId': leadObject.id,
+						'includeDeleted': true
+					}
+				}
+			},
+			created() {
+				const promises = [
+					customAjaxRequest(apiEndpoints.TaskManager.GetTaskPriorityList),
+					customAjaxRequest(apiEndpoints.TaskManager.GetTaskStatusList)
+				];
+				Promise.all(promises).then(result => {
+					this.taskPriorities = this.convertArrayToSelectList(result[0], 'text', 'value', 'system_taskmanager_');
+					this.taskStatuses = this.convertArrayToSelectList(result[1], 'text', 'value', 'system_taskmanager_');
+					this.loadTable = true;
+				});
+			},
+			methods: {
+				async deleteTasks(tasks) {
+					tasks.forEach((id, i, a) => {
+						customAjaxRequest(apiEndpoints.TaskManager.DeleteTaskPermanent, 'POST', { id }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deactivateTasks(tasks) {
+					tasks.forEach((id, i, a) => {
+						customAjaxRequest(apiEndpoints.TaskManager.DeleteTask, 'POST', { id }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateTasks(tasks) {
+					tasks.forEach((id, i, a) => {
+						customAjaxRequest(apiEndpoints.TaskManager.RestoreTask, 'POST', { id }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadTask(id) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.TaskManager.GetTask, 'GET', { id }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(e);
+						});
+					});
+				},
+				getPriorityBadge(val) {
+					let badgeClass = 'badge-outline-default';
+					switch (val.value) {
+						case '0':
+							badgeClass= 'badge-outline-info';
+							break;
+						case '1':
+							badgeClass= 'badge-outline-primary';
+							break;
+						case '2':
+							badgeClass= 'badge-outline-warning';
+							break;
+						case '3':
+							badgeClass= 'badge-outline-danger';
+							break;
+					}
+					return `<span class="badge ${badgeClass}">${val.label}</span>`;
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateTasks(action.value);
+							break;
+						} case 'activate': {
+							this.activateTasks(action.value);
+							break;
+						} case 'delete': {
+							this.deleteTasks(action.value);
+							break;
+						}
+					}
+				},
+				initials(name, surname) {
+					return name && surname ? `${name.charAt(0)} ${surname.charAt(0)}` : 'UP';
+				},
+				convertArrayToSelectList(array, textProp, valueProp, translatePrefix = null) {
+					return array.map(e => {
+						const text = e[textProp];
+						const newObj = {
+							label: translatePrefix ? window.translate(translatePrefix + text.toLowerCase()) : text,
+							value: e[valueProp]
+						}
+						return newObj;
+					});
+				},
+			}
+		});
+	</script>
+	<script type="text/x-template" id="page-template">
+		<div class="row ml-40px mr-0">
+			<div class="col-lg-7 bg-white border rounded py-15 px-20">
+				<div class="d-flex">
+					<h6>@Localizer["details_overview"]</h6>
+					<div class="ml-auto">
+						<a href="#" class="details-page-actions" data-toggle="dropdown">
+							<i data-feather="more-vertical"></i>
+						</a>
+						<div class="dropdown-menu">
+							<a class="dropdown-item" @@click="openModal" href="#">Edit</a>
+						</div>
+					</div>
+				</div>
+				<hr class="hr-description">
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_lead_name"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_start_date"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Created</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_end_date"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.DeadLine</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_organization"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Organization.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_pipeline"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.PipeLine.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_stage"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Stage.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_state"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.LeadState.Name</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_value"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Value @Model.Currency?.Symbol</p>
+					</div>
+				</div>
+				@*<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_nr_units"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.UnitsNumber</p>
+					</div>
+				</div>
+				<div class="row no-gutters">
+					<div class="col-fixed-220">
+						<p class="p-sm mb-0">@Localizer["details_commision"]</p>
+					</div>
+					<div class="d-block mb-sm-0 mb-1">
+						<p class="p-sm mb-0 color-black">@Model.Commission %</p>
+					</div>
+				</div>*@
+			</div>
+			<div class="col-lg-5">
+				<Members />
+			</div>
+			<div class="col-lg-7 p-0">
+				<LeadTasks />
+			</div>
+			<LeadModalForm ref="modals" :editable="true" @@action="modalAction" pipelineId="@Model.PipeLineId" />
+		</div>
+	</script>
+	<script>
+		Vue.component('LeadDetails', {
+			template: '#page-template',
+			beforeCreate() {
+				const breadcrumbs = [
+					'Pipelines',
+					`<a href="/PipeLine/PipeLineLeads?id=@Model.PipeLineId">@Model.PipeLine?.Name</a>`,
+					`@Model.Name`
+				]
+				this.$store.dispatch("setCustomBreadcrumbsAction", breadcrumbs);
+			},
+			methods: {
+				openModal() {
+					this.$refs['modals'].editLead('@Model.Id');
+				},
+				modalAction() {
+					location.reload();
+				}
+			}
+		});
+	</script>
+}

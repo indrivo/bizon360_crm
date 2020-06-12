@@ -1,0 +1,294 @@
+@{
+	ViewData["Title"] = "Work categories";
+}
+
+<WorkCategories />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/file.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('WorkCategories', {
+			template: `
+					<div>
+						<PageOptionsBar :searcheable="true" :pageOptionsComponents="pageOptionsComponents" @@searchInput="searchTable"/>
+						<div>
+							<Table
+								:fields="tableFields"
+								:apiUrl="apiUrl"
+								:httpMethod="httpMethod"
+								@@triggeredMenuAction="action"
+								tableId="workCategories-table"
+								:initialPageSize="20"
+								:customQueryparams="customQueryparams"
+								:hasCustomQUeryparams="true"
+								:reload="tableKey"
+								dataPath="result.result"
+								:actionsSingle="tableActions.single"
+								:actionsSingleDisabled="tableActions.singleDisabled"
+								:actionsMultiple="tableActions.multiple"
+								:actionsMultipleDisabled="tableActions.multipleDisabled"
+								:haveContextMenu="true"
+							>
+							</Table>
+						</div>
+						<Modal :refreshInputs="refreshInputs" :modalProps="modalProps" @@newValue="emitModalValue"/>
+					</div>`
+			,
+			data() {
+				return {
+					apiUrl: apiEndpoints.WorkCategory.GetAllPaginatedWorkCategory,
+					httpMethod: 'get',
+					tableFields: [
+						{
+							name: 'name',
+							title: 'Name',
+							visible: true
+						},
+						{
+							name: 'description',
+							title: 'Description',
+							visible: true
+						}
+					],
+					dataLoad: false,
+					modalValues: {},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add work category',
+								btnType: 'success',
+								className: 'ml-auto',
+								onClick: () => {
+									this.resetModalValues();
+									this.editableModal = false;
+									$(`#${this.modalProps.id}`).modal("show");
+								}
+							}
+						}
+					],
+					tableActions: {
+						single: {
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					waitAddButton: false,
+					editableModal: false,
+					refreshInputs: 0,
+					searchString: ''
+				};
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						'includeDeleted': true,
+						'gSearch': this.searchString
+					}
+				},
+				modalProps() {
+					return {
+						id: 'paymentModal',
+						label: this.editableModal ? 'Edit work category' : 'Add work category',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'workC-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									className: 'col-12',
+									value: this.modalValues.name,
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'workC-description',
+									label: 'Description',
+									className: 'col-12',
+									value: this.modalValues.description
+								}
+							},
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							if (!this.editableModal) {
+								this.addNewEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							} else {
+								this.updateEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+			},
+			created() {
+				this.resetModalValues();
+			},
+			methods: {
+				async addNewEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.WorkCategory.AddWorkCategory, 'PUT', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.WorkCategory.UpdateWorkCategory, 'POST', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.WorkCategory.DisableWorkCategoryByI, 'POST', { workCategoryId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.WorkCategory.ActivateWorkCategoryById, 'POST', { workCategoryId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.WorkCategory.DeleteWorkCategoryById, 'DELETE', { workCategoryId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadEntity(entityId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.WorkCategory.GetWorkCategoryById, 'GET', { workCategoryId: entityId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				editEntity(entityId) {
+					this.loadEntity(entityId).then(result => {
+						this.editableModal = true;
+						this.modalValues = result;
+						this.refreshInputs++;
+						$(`#${this.modalProps.id}`).modal("show");
+					});
+				},
+				resetModalValues() {
+					this.modalValues = {
+						name: null,
+						description: null
+					}
+				},
+				emitModalValue(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.modalValues[val.id.replace('workC-', '')] = newVal;
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateEntities(action.value);
+							break;
+						} case 'activate': {
+							this.activateEntities(action.value);
+							break;
+						} case 'edit': {
+							this.editEntity(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteEntities(action.value);
+							break;
+						}
+					}
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				}
+			}
+		});
+
+	</script>
+}

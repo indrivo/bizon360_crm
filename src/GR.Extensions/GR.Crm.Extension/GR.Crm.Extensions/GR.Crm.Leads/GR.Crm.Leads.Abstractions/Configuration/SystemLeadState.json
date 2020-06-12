@@ -1,0 +1,24 @@
+[
+    {
+        "Id": "d48753d8-4197-4930-b4c6-acd21e0e8c76",
+        "StateStyleClass": "outline-primary",
+        "IsSystem": "true",
+        "Name": "New",
+        "Order": "1"
+
+    },
+    {
+        "Id": "fce645cb-d30c-40dd-afbd-80ef673f7b17",
+        "StateStyleClass": "success",
+        "IsSystem": "true",
+        "Name": "Won",
+        "Order": "2"
+    },
+    {
+        "Id": "7de9b8ea-2cd7-479b-b9d8-48a293eae5fd",
+        "StateStyleClass": "outline-danger",
+        "IsSystem": "true",
+        "Name": "Lost",
+        "Order": "3"
+    }
+]

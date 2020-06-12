@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\GR.Core.Extension\GR.Core\GR.Core.csproj" />
+    <ProjectReference Include="..\..\..\GR.Crm.Abstractions\GR.Crm.Abstractions.csproj" />
+    <ProjectReference Include="..\..\GR.Crm.Leads\GR.Crm.Leads.Abstractions\GR.Crm.Leads.Abstractions.csproj" />
+    <ProjectReference Include="..\..\GR.Crm.Organizations\GR.Crm.Organizations.Abstractions\GR.Crm.Organizations.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

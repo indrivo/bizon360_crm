@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="2.10.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\GR.Core.Extension\GR.Core.Razor\GR.Core.Razor.csproj" />
+    <ProjectReference Include="..\..\..\..\GR.Identity.Extension\GR.Identity.Permissions.Abstractions\GR.Identity.Permissions.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\GR.Identity.Extension\GR.Identity\GR.Identity.csproj" />
+    <ProjectReference Include="..\..\..\..\GR.TaskManager.Extension\GR.TaskManager.Abstractions\GR.TaskManager.Abstractions.csproj" />
+    <ProjectReference Include="..\..\GR.Crm.Payments\GR.Crm.Payments.Abstractions\GR.Crm.Payments.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Leads.Abstractions\GR.Crm.Leads.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

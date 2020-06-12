@@ -1,0 +1,554 @@
+@{
+	ViewData["Title"] = "Teams";
+}
+
+<Team />
+
+@section Scripts {
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		Vue.component('Team', {
+			template: `
+					<div>
+						<PageOptionsBar :searcheable="true" :pageOptionsComponents="pageOptionsComponents" @@searchInput="searchTable"/>
+						<Table
+								:fields="tableFields"
+								:apiUrl="apiUrl"
+								:httpMethod="httpMethod"
+								@@triggeredMenuAction="action"
+								tableId="teams-table"
+								:sortOrder="tableConfig.sortCol"
+								:initialPageSize="20"
+								:reload="tableKey"
+								dataPath="result.result"
+								:customQueryparams="customQueryparams"
+								:hasCustomQUeryparams="true"
+								:actionsSingle="tableActions.single"
+								:actionsSingleDisabled="tableActions.singleDisabled"
+								:actionsMultiple="tableActions.multiple"
+								:actionsMultipleDisabled="tableActions.multipleDisabled"
+								:haveContextMenu="true"
+							>
+								<slot slot="teamMembers" slot-scope="props">
+									<a 
+										v-for="member in props.rowData.teamMembers"
+										:key="member.id"
+										class="btn btn-outline-primary user-rectangle"
+										href="#"
+										@@click.stop
+										>
+										{{ initials(member.firstName, member.lastName) }}
+									</a>
+									<a href="#" @@click.stop="openAddMember(props.rowData.id)" class="btn btn-outline-success user-rectangle edit-entity-members-link">+</a>
+								</slot>
+							</Table>
+						<Modal :modalProps="modalTeamProps" @@newValue="emitValueTeam" :refreshInputs="refreshInputs"/>
+						<Modal :modalProps="modalAddTeamMemberProps" @@newValue="emitValueTeamMember" :refreshInputs="refreshNewMemberInputs"/>
+					</div>
+				`,
+			data() {
+				return {
+					apiUrl: apiEndpoints.Team.GetPaginatedTeam,
+					httpMethod: 'get',
+					tableKey: 0,
+					refreshInputs: 0,
+					refreshNewMemberInputs: 0,
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'name',
+								sortField: 'name',
+								direction: 'asc'
+							}
+						]
+					},
+					tableFields: [
+						{
+							name: 'name',
+							title: 'Name',
+							sortField: 'name',
+							visible: true
+						},
+						{
+							name: 'created',
+							title: 'Created',
+							visible: true
+						},
+						{
+							name: 'teamMembers',
+							title: 'Members',
+							visible: true,
+							dataClass: 'td-users'
+						}
+					],
+					tableActions: {
+						single: {
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					addAndNew: false,
+					waitAddButton: false,
+					refreshInputs: 0,
+					editableTeamModal: false,
+					teamMemberValues: {
+						listMembers: []
+					},
+					memberTeamUsers: [],
+					teamValues: {
+						name: '',
+						listMembers: [],
+					},
+					users: [],
+					ownerUsers: [],
+					membersUsers: [],
+					allUsersSelect: [],
+					teams: [],
+					teamRoles: [],
+					searchString: null,
+					defaultMemberRoleId: 'c92e023d-6804-43e8-88a8-ec807427d850',
+					defaultOwnerRoleId: '11447a80-eff9-4f68-b24f-353ab2d5ee92'
+				}
+			},
+			created() {
+				customAjaxRequest(apiEndpoints.TaskManager.GetUsersList).then(result => {
+					this.ownerUsers = this.convertUsersToSelectList(result);
+					this.membersUsers = this.convertUsersToSelectList(result);
+					this.allUsersSelect = this.convertUsersToSelectList(result);
+				});
+				customAjaxRequest(apiEndpoints.Team.GetAllTeamRoles).then(result => {
+					this.teamRoles = result;
+				});
+				customAjaxRequest(apiEndpoints.Team.GetAllTeams).then(result => {
+					this.teams = result;
+				});
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						'includeDeleted': true,
+						'gSearch': this.searchString
+					}
+				},
+				pageOptionsComponents() {
+					return [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add team',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableTeamModal = false;
+									this.resetTeamValues();
+									this.refreshInputs++;
+									$(`#${this.modalTeamProps.id}`).modal("show");
+								}
+							}
+						}
+					]
+				},
+				teamFormSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalTeamProps.id}`).modal("hide");
+								}
+							}
+						}];
+					if (!this.editableTeamModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onClick: async e => {
+										e.preventDefault();
+										const response = await this.addNewTeam();
+										if (response) $(`#${this.modalTeamProps.id}`).modal("hide");
+									}
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onClick: async e => {
+										e.preventDefault();
+										const response = await this.updateTeam();
+										if (response) $(`#${this.modalTeamProps.id}`).modal("hide");
+									}
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalTeamlabel() {
+					return this.editableTeamModal ? 'Edit team' : 'Add team';
+				},
+				modalTeamProps() {
+					return {
+						id: 'organizationModal',
+						label: this.modalTeamlabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'team-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									value: this.teamValues.name,
+									className: 'col-12',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'team-owner',
+									label: 'Owner',
+									options: this.ownerUsers,
+									size: 10,
+									searchable: true,
+									value: this.teamValues.owner,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'team-listMembers',
+									label: 'Members',
+									options: this.membersUsers,
+									multiple: true,
+									size: 10,
+									searchable: true,
+									value: this.teamValues.listMembers,
+									className: 'col-12'
+								}
+							},
+						],
+						formSubmits: this.teamFormSubmits
+					}
+				},
+				modalAddTeamMemberProps() {
+					return {
+						id: 'addTeamMemberModal',
+						label: 'Add team meber',
+						formInputs: [
+							{
+								name: 'Select',
+								props: {
+									id: 'teamMember-listMembers',
+									label: 'Members',
+									options: this.memberTeamUsers,
+									multiple: true,
+									size: 10,
+									searchable: true,
+									value: this.teamMemberValues.listMembers,
+									className: 'col-12'
+								}
+							},
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalTeamProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onClick: async e => {
+										e.preventDefault();
+										const response = await this.addNewMembersToTeam(this.teamMemberValues);
+										if (response) $(`#${this.modalAddTeamMemberProps.id}`).modal("hide");
+									}
+								}
+							}
+						]
+					}
+				}
+			},
+			methods: {
+				async addNewTeam() {
+					return new Promise((resolve, reject) => {
+						const { listMembers, ...newObj } = this.teamValues;
+						let newListMembers = [];
+						if (listMembers.length > 0) {
+							listMembers.forEach(userId => {
+								newListMembers.push({
+									userId,
+									roleId: this.defaultMemberRoleId
+								});
+							});
+						}
+						newObj.listMembers = newListMembers;
+						customAjaxRequest(apiEndpoints.Team.AddTeam, 'PUT', newObj).then(teamId => {
+							if (this.teamValues.owner) {
+								const options = {
+									userId: this.teamValues.owner,
+									teamId,
+									teamRoleId: this.defaultOwnerRoleId,
+								}
+								this.addNewMemberToTeam(options);
+								this.tableKey++;
+							}
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async deleteTeams(teams) {
+					teams.forEach((teamId, i, a) => {
+						customAjaxRequest(apiEndpoints.Team.DeleteTeamById, 'DELETE', { teamId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deactivateTeams(teams) {
+					teams.forEach((teamId, i, a) => {
+						customAjaxRequest(apiEndpoints.Team.DisableTeam, 'POST', { teamId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateTeams(teams) {
+					teams.forEach((teamId, i, a) => {
+						customAjaxRequest(apiEndpoints.Team.ActivateTeam, 'DELETE', { teamId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async updateTeam() {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Team.UpdateTeam, 'POST', this.teamValues).then(() => {
+							this.tableKey++;
+							if (this.teamValues.owner) {
+								const options = {
+									userId: this.teamValues.owner,
+									teamId: this.teamValues.id,
+									teamRoleId: this.defaultOwnerRoleId,
+								}
+								this.addNewMemberToTeam(options);
+							}
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async addNewMemberToTeam(options) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Team.AddNewMemberToTeam, 'PUT', options).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async addNewMembersToTeam(options) {
+					return new Promise((resolve, reject) => {
+						options.listMembers.forEach((m, i, a) => {
+							const apiOptions = {
+								userId: m,
+								teamId: options.id,
+								teamRoleId: this.defaultMemberRoleId
+							}
+							customAjaxRequest(apiEndpoints.Team.AddNewMemberToTeam, 'PUT', apiOptions).then(() => {
+								if (i === a.length - 1) {
+									this.tableKey++;
+									resolve(true);
+								}
+							}).catch(e => {
+								toast.notifyErrorList(e);
+								reject(false);
+							});
+						});
+					});
+				},
+				loadTeam(teamId) {
+					const team = this.findObjectByPropValue(this.teams, teamId, 'id');
+					const { teamMembers, author, created, modifiedBy, changed, isDeleted, version, tenantId, ...newTeam } = team;
+					let newListMembers = [];
+					teamMembers.forEach(t => {
+						if (t.teamRoleId = this.defaultMemberRoleId) {
+							newListMembers.push(t.userId);
+						}
+					});
+					const owner = this.findObjectByPropValue(teamMembers, this.defaultOwnerRoleId, 'teamRoleId');
+					if (owner) {
+						newTeam.owner = owner.userId;
+					}
+					newTeam.listMembers = newListMembers;
+					return newTeam;
+				},
+				editTeam(teamId) {
+					this.teamValues = this.loadTeam(teamId);
+					this.refreshInputs++;
+					$(`#${this.modalTeamProps.id}`).modal("show");
+				},
+				addTeamMember(teamId) {
+					const team = this.loadTeam(teamId);
+					this.teamMemberValues.id = teamId;
+					this.memberTeamUsers = this.allUsersSelect.filter(m => {
+						return !team.listMembers.includes(m.value);
+					});
+				},
+				convertUsersToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.text,
+							value: e.value
+						}
+						return newObj;
+					});
+				},
+				resetTeamValues() {
+					this.teamValues = {
+						name: '',
+						owner: '',
+						listMembers: []
+					}
+				},
+				emitValueTeam(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.teamValues[val.id.replace('team-', '')] = newVal;
+					if (val.id == 'team-owner') {
+
+						this.membersUsers = this.membersUsers.map(m => {
+							m.disabled = false;
+							return m;
+						});
+						this.changeObjPropInArrayById(this.membersUsers, true, 'disabled', newVal, 'value');
+
+						this.teamValues.listMembers = this.teamValues.listMembers.filter(m => {
+							return m != newVal;
+						});
+					} else if (val.id == 'team-listMembers') {
+
+					}
+				},
+				emitValueTeamMember(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.teamMemberValues[val.id.replace('teamMember-', '')] = newVal;
+				},
+				findObjectByPropValue(array, value, prop) {
+					return array.find(x => x[prop] === value);
+				},
+				changeObjPropInArrayById(array, value, prop, id, idProp) {
+					for (var i in array) {
+						if (array[i][idProp] == id) {
+							array[i][prop] = value;
+							break;
+						}
+					}
+				},
+				openAddMember(teamId) {
+					this.refreshNewMemberInputs++;
+					this.addTeamMember(teamId);
+					$(`#${this.modalAddTeamMemberProps.id}`).modal("show");
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateTeams(action.value);
+							break;
+						} case 'activate': {
+							this.activateTeams(action.value);
+							break;
+						} case 'edit': {
+							this.editTeam(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteTeams(action.value);
+							break;
+						}
+					}
+				},
+				initials(name, surname) {
+					return name && surname ? `${name.charAt(0)} ${surname.charAt(0)}` : 'UP';
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				}
+			}
+		});
+	</script>
+}

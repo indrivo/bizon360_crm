@@ -1,0 +1,1232 @@
+@{
+	ViewData["Title"] = "Dashboard";
+}
+@section Styles{
+	<style>
+		.border-right-1px {
+			border-right: 1px solid #DCE0E4;
+		}
+
+		.cl-grey {
+			color: #808890;
+		}
+
+		.w-80px {
+			width: 80px;
+		}
+
+		.block-wrapper {
+			padding: 10px 20px;
+		}
+
+		.chart-canvas {
+			max-width: 170px;
+			width: 170px;
+			margin-top: 25px;
+			margin-bottom: 25px;
+			transition: 0.3s ease-in-out;
+		}
+
+		@@media screen and (max-width: 1450px) and (min-width: 1200px) {
+			.chart-canvas.sidebar-open {
+				max-width: 100px;
+				width: 100px;
+				transition: 0.3s ease-in-out;
+			}
+		}
+
+		.block-label {
+			font-size: 14px;
+			font-weight: 600;
+		}
+
+		/*.line-chart-wrapper {
+			height: 200px;
+		}*/
+
+		.chart-label {
+			border-bottom: 1px solid #DCE0E4;
+			padding-bottom: 3px;
+		}
+
+		.chart-label-info {
+			color: #2850F0;
+			cursor: pointer;
+		}
+
+		.chart-legend {
+			margin-left: 20px;
+			width: calc(100% - 190px);
+		}
+
+		.chart-legend-item {
+			height: 45px;
+			width: 200px;
+		}
+
+		.chart-legend-item-data {
+			margin-left: 10px;
+		}
+
+		.chart-legend-item-color {
+			width: 3px;
+			min-width: 3px;
+			height: calc(100% - 10px);
+		}
+
+		.chart-legend-item-text,
+		.chart-legend-item-count {
+			line-height: 1;
+		}
+
+		.item-count {
+			font-size: 24px;
+			letter-spacing: 0;
+			line-height: 1;
+			margin-bottom: 3px;
+		}
+
+		.fz-20px {
+			font-size: 20px !important;
+		}
+
+		.chart-legend-item-text {
+			font-size: 14px;
+			color: #808890;
+			letter-spacing: 0;
+			white-space: nowrap;
+			line-height: 16px;
+		}
+
+		.progress-procent {
+			margin-left: 10px;
+			min-width: 50px;
+		}
+
+			.progress-procent.row-procent {
+				display: flex;
+			}
+
+				.progress-procent.row-procent .progress-procent-count {
+					margin-left: 5px;
+				}
+
+		.progress-procent-count {
+			line-height: 1;
+			font-size: 13px;
+			letter-spacing: -1px;
+		}
+	</style>
+}
+<div>
+	<DashboardLeads />
+</div>
+@section Scripts{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/loader.js"></script>
+	<script src="~/lib/Chart.js/Chart.js"></script>
+
+	<script>
+		Vue.filter('numberWithCommas', x => {
+			return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+		});
+	</script>
+
+	@*CountUpNumber*@
+
+	<script type="text/x-template" id="countUpNumber-template">
+		<div :id="'countup-' + id" class="countup-number">
+			{{ number }}
+		</div>
+	</script>
+	<script>
+		Vue.component('CountUpNumber', {
+			template: '#countUpNumber-template',
+			props: {
+				id: String,
+				number: Number,
+			},
+			mounted() {
+
+			}
+		});
+	</script>
+
+	@*ProgressProcent*@
+	<script type="text/x-template" id="progressProcent-template">
+		<div :class="className + ' progress-procent'" :style="'color: ' + color">
+			<i :data-feather="icon"></i>
+			<div class="progress-procent-count">
+				{{ procent | absoluteProcent}}%
+			</div>
+		</div>
+	</script>
+	<script>
+		Vue.component('ProgressProcent', {
+			template: `#progressProcent-template`,
+			props: {
+				procent: Number,
+				className: String
+			},
+			computed: {
+				icon() {
+					const procent = this.procent;
+					return procent === 0 ? 'minus'
+						: procent > 0 ? 'trending-up'
+							: 'trending-down';
+				},
+				color() {
+					const procent = this.procent;
+					return procent === 0 ? '#808890'
+						: procent > 0 ? '#20BC40'
+							: '#FF2850';
+				}
+			},
+			filters: {
+				absoluteProcent: value => {
+					return Math.abs(value);
+				}
+			},
+			mounted() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+			},
+			updated() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+			}
+		});
+	</script>
+
+	@*ChartLegendItem*@
+	<script type="text/x-template" id="chartLegendItem-template">
+		<div class="chart-legend-item mt-1">
+			<div class="d-flex align-items-end h-100">
+				<div class="chart-legend-item-color" :style="'background-color: '+ data.color"></div>
+				<ProgressProcent v-if="showProcent" :procent="this.data.procent" className="d-flex flex-column justify-content-center align-items-center" />
+				<div class="chart-legend-item-data">
+					<div class="chart-legend-item-count item-count">
+						{{ data.count | numberWithCommas }}
+					</div>
+					<div class="chart-legend-item-text">
+						{{ data.text | numberWithCommas }}
+					</div>
+				</div>
+			</div>
+		</div>
+	</script>
+	<script>
+		Vue.component('ChartLegendItem', {
+			template: '#chartLegendItem-template',
+			props: {
+				data: Object
+			},
+			computed: {
+				showProcent() {
+					return typeof this.data.procent !== 'undefined';
+				}
+			}
+		});
+	</script>
+
+	@*Doughnut component*@
+	<script type="text/x-template" id="doughnutChart-template">
+		<div class="card doughnut-chart-wrapper block-wrapper">
+			<div class="chart-label block-label d-flex">
+				<div class="chart-label-text">
+					{{ chartTitle }}
+				</div>
+				<div class="chart-label-info ml-auto d-flex align-items-center"
+					 @@click="chartInfoClick">
+					<i data-feather="alert-circle"></i>
+				</div>
+			</div>
+			<div class="d-flex align-items-center chart doughnut-chart flex-wrap">
+				<div class="chart-canvas" :class="{'sidebar-open' : $store.state.sidebarOpen}">
+					<canvas :id="id"></canvas>
+				</div>
+				<div class="chart-legend flex-grow-1 d-flex flex-wrap  justify-content-center">
+					<template v-for="(l,i) in labels">
+						<ChartLegendItem :data="l" :key="i" />
+					</template>
+				</div>
+			</div>
+		</div>
+	</script>
+	<script>
+		Chart.pluginService.register({
+			beforeDraw: function (chart) {
+				if (chart.config.options.elements.center) {
+					// Get ctx from string
+					var ctx = chart.chart.ctx;
+
+					// Get options from the center object in options
+					var centerConfig = chart.config.options.elements.center;
+					var fontStyle = centerConfig.fontStyle || 'Arial';
+					var txt = centerConfig.text;
+					var txt2 = centerConfig.text2;
+					var color = centerConfig.color || '#000';
+					var maxFontSize = centerConfig.maxFontSize || 75;
+					var sidePadding = centerConfig.sidePadding || 20;
+					var sidePaddingCalculated = (sidePadding / 100) * (chart.innerRadius * 2)
+					// Start with a base font of 30px
+					ctx.font = "30px " + fontStyle;
+
+					// Get the width of the string and also the width of the element minus 10 to give it 5px side padding
+					var stringWidth = ctx.measureText(txt).width;
+					var string2Width = ctx.measureText(txt2).width;
+					var elementWidth = (chart.innerRadius * 2) - sidePaddingCalculated;
+
+					//Custom
+					var widest = stringWidth > string2Width ? stringWidth : string2Width;
+
+					// Find out how much the font can grow in width.
+					var widthRatio = elementWidth / widest;
+					var newFontSize = Math.floor(30 * widthRatio);
+					var elementHeight = (chart.innerRadius * 2);
+
+					// Pick a new font size so it will not be larger than the height of label.
+					var fontSizeToUse = Math.min(newFontSize, elementHeight, maxFontSize);
+					var minFontSize = centerConfig.minFontSize;
+					var lineHeight = centerConfig.lineHeight || 25;
+					var wrapText = false;
+
+					if (minFontSize === undefined) {
+						minFontSize = 20;
+					}
+
+					if (minFontSize && fontSizeToUse < minFontSize) {
+						fontSizeToUse = minFontSize;
+						wrapText = true;
+					}
+
+					// Set font settings to draw it correctly.
+					ctx.textAlign = 'center';
+					ctx.textBaseline = 'middle';
+					var centerX = ((chart.chartArea.left + chart.chartArea.right) / 2);
+					var centerY = ((chart.chartArea.top + chart.chartArea.bottom) / 2);
+					ctx.font = '600 ' + fontSizeToUse + "px " + fontStyle;
+					ctx.fillStyle = color;
+
+					if (!wrapText) {
+						if (centerConfig.text2) {
+							ctx.fillText(txt, centerX, centerY - 5);
+							ctx.fillText(txt2, centerX, centerY + 15);
+						} else {
+							ctx.fillText(txt, centerX, centerY);
+						}
+						ctx.font = '14px ' + fontStyle;
+						return;
+					}
+
+					var words = txt.split(' ');
+					var line = '';
+					var lines = [];
+
+					// Break words up into multiple lines if necessary
+					for (var n = 0; n < words.length; n++) {
+						var testLine = line + words[n] + ' ';
+						var metrics = ctx.measureText(testLine);
+						var testWidth = metrics.width;
+						if (testWidth > elementWidth && n > 0) {
+							lines.push(line);
+							line = words[n] + ' ';
+						} else {
+							line = testLine;
+						}
+					}
+
+					// Move the center up depending on line height and number of lines
+					centerY -= (lines.length / 2) * lineHeight;
+
+					for (var n = 0; n < lines.length; n++) {
+						ctx.fillText(lines[n], centerX, centerY);
+						centerY += lineHeight;
+					}
+					//Draw text in center
+					ctx.fillText(line, centerX, centerY);
+				}
+			}
+		});
+		Vue.component('DoughnutChart', {
+			template: '#doughnutChart-template',
+			props: {
+				chartTitle: String,
+				id: String,
+				labels: Array,
+				datasets: Array,
+				totalCount: [Number, String],
+				textTotal: String,
+				link: String
+			},
+			computed: {
+				computedLabels() {
+					let returnArray = [];
+					this.labels.forEach(l => {
+						returnArray.push(l.text);
+					});
+					return returnArray;
+				}
+			},
+			mounted() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+				let _ = new Chart($(`#${this.id}`), {
+					type: 'doughnut',
+					data: {
+						labels: this.computedLabels,
+						datasets: this.datasets
+					},
+					options: {
+						borderWidth: 0,
+						legend: false,
+						aspectRatio: 1,
+						responsive: true,
+						elements: {
+							center: {
+								text: `${this.totalCount}`,
+								text2: this.textTotal ? `${this.textTotal}` : null,
+								color: '#081018', // Default is #000000
+								fontStyle: 'Blinker', // Default is Arial
+								maxFontSize: 25,
+								sidePadding: 20, // Default is 20 (as a percentage)
+								minFontSize: 14, // Default is 20 (in px), set to false and text will not wrap.
+								lineHeight: 20 // Default is 25 (in px), used for when text wraps
+							}
+						},
+						tooltips: {
+							callbacks: {
+								label: function (tooltipItem, data) {
+									var value = data.datasets[0].data[tooltipItem.index];
+									value = value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+									return value;
+								},
+								labelTextColor: () => '#081018'
+							},
+							backgroundColor: '#FFFFFF',
+							displayColors: false,
+							borderWidth: 1,
+							borderColor: '#DCE0E4'
+						}
+					}
+				});
+			},
+			updated() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+			},
+			methods: {
+				chartInfoClick() {
+					window.location.href = this.link;
+				}
+			}
+		});
+	</script>
+
+	@*LineChart*@
+	<script type="text/x-template" id="lineChart-template">
+		<div class="card line-chart-wrapper block-wrapper">
+			<div class="chart-label block-label d-flex">
+				<div class="chart-label-text">
+					{{ chartTitle }}
+				</div>
+				<div class="chart-label-info ml-auto d-flex align-items-center"
+					 @@click="chartInfoClick">
+					<i data-feather="alert-circle"></i>
+				</div>
+			</div>
+			<div class="d-flex align-items-center chart doughnut-chart flex-wrap h-100">
+				<canvas :id="id"></canvas>
+			</div>
+		</div>
+	</script>
+	<script>
+		Vue.component('LineChart', {
+			template: '#lineChart-template',
+			props: {
+				chartTitle: String,
+				id: String,
+				labels: Array,
+				datasets: Array,
+				link: String
+			},
+			computed: {
+				computedLabels() {
+					let returnArray = [];
+					this.labels.forEach(l => {
+						returnArray.push(l.text);
+					});
+					return returnArray;
+				}
+			},
+			mounted() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+				let _ = new Chart($(`#${this.id}`), {
+					type: 'line',
+					data: {
+						labels: this.labels,
+						datasets: this.datasets
+					},
+					options: {
+						aspectRatio: 3,
+						elements: {
+							line: {
+								tension: 0
+							}
+						},
+						tooltips: {
+							backgroundColor: '#FFFFFF',
+							displayColors: false,
+							callbacks: {
+								label: function (tooltipItem, data) {
+									let value = tooltipItem.value;
+									value = value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+									const label = `${data.datasets[tooltipItem.datasetIndex].label} - ${value} MDL`;
+									return label;
+								},
+								labelTextColor: () => '#081018',
+								title: () => '',
+							},
+							borderWidth: 1,
+							borderColor: '#DCE0E4'
+						},
+						scales: {
+							xAxes: [{
+								type: 'time',
+								time: {
+									unit: 'day',
+									stepSize: '1',
+									isoWeekday: true,
+									displayFormats: {
+										day: 'DD'
+									}
+								}
+							}],
+							yAxes: [{
+								ticks: {
+									beginAtZero: true,
+									userCallback: function (value, index, values) {
+										// Convert the number to a string and splite the string every 3 charaters from the end
+										value = value.toString();
+										value = value.split(/(?=(?:...)*$)/);
+										value = value.join(',');
+										return value;
+									}
+								}
+							}]
+						},
+						legend: {
+							onClick: function (_, legendItem) {
+								var index = legendItem.datasetIndex;
+								var ci = this.chart;
+								if (ci.data.datasets[index].hidden) {
+									ci.data.datasets.forEach((_, i, a) => {
+										let meta = ci.data.datasets[i];
+										if (index !== i) {
+											meta.hidden = true;
+										} else {
+											meta.hidden = false;
+										}
+										if (i === a.length - 1) {
+											ci.update();
+										}
+									});
+								}
+							},
+							labels: {
+								boxWidth: 30,
+								boxHeight: 4
+							}
+						}
+					}
+				});
+			},
+			updated() {
+				feather.replace({
+					width: 17,
+					height: 17,
+				});
+			},
+			methods: {
+				chartInfoClick() {
+					window.location.href = this.link;
+				}
+			}
+		});
+	</script>
+
+	@*SimpleBlock*@
+	<script type="text/xtemplate" id="simpleBlock-template">
+		<div :class="className">
+			<h3 class="font-weight-normal mb-10px">
+				{{ title }}
+			</h3>
+			<div class="card block-wrapper">
+				<div class="d-flex">
+					<div class="block-label mb-10px">
+						{{ label }}
+					</div>
+					<div class="chart-label-info ml-auto d-flex align-items-center"
+						 @@click="infoClick">
+						<i data-feather="alert-circle"></i>
+					</div>
+				</div>
+				<div class="d-flex align-items-center">
+					<ProgressProcent v-if="procent" className="row-procent" :procent="procent" />
+					<div class="ml-2 item-count">
+						{{ value | numberWithCommas }}
+					</div>
+				</div>
+			</div>
+		</div>
+	</script>
+	<script>
+		Vue.component('SimpleBlock', {
+			template: '#simpleBlock-template',
+			props: {
+				className: String,
+				title: String,
+				label: String,
+				link: String,
+				value: [String, Number],
+				procent: Number
+			},
+			methods: {
+				infoClick() {
+					window.location.href = this.link;
+				}
+			}
+		});
+	</script>
+
+	@*ColumnsBlock*@
+	<script type="text/x-template" id="columnsBlock-template">
+		<div>
+			<h3 class="font-weight-normal mb-10px ml-20px">
+				{{ title }}
+			</h3>
+			<div class="card block-wrapper">
+				<div class="row">
+					<div class="col">
+						<div class="row">
+							<div v-for="(block,i) in blocks"
+								 class="col-12 col-md-6"
+								 :class="responsiveClass">
+								<div :class="{'border-right-1px' : blocks.length > i + 1 }">
+									<div class="block-label mb-10px">
+										{{ block.label }}
+									</div>
+									<div class="d-flex align-items-center">
+										<ProgressProcent className="row-procent" :procent="block.procent" />
+										<div class="ml-2 item-count">
+											{{ block.value | numberWithCommas }}
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="col-auto">
+						<div class="d-flex">
+							<div class="chart-label-info ml-auto d-flex align-items-center"
+								 @@click="infoClick">
+								<i data-feather="alert-circle"></i>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</script>
+	<script>
+		Vue.component('ColumnsBlock', {
+			template: '#columnsBlock-template',
+			props: {
+				title: String,
+				className: String,
+				blocks: Array,
+				link: String
+			},
+			computed: {
+				responsiveClass() {
+					switch (this.blocks.length) {
+						case 1: {
+							return 'col-lg-12';
+						} case 2: {
+							return 'col-lg-6';
+						} case 3: {
+							return 'col-lg-4';
+						} default: {
+							return 'col-lg-3';
+						}
+					}
+				}
+			},
+			methods: {
+				infoClick() {
+					window.location.href = this.link;
+				}
+			}
+		})
+	</script>
+
+	@*ColumnBlocksWithTotal*@
+	<script type="text/x-template" id="columnBlocksWithTotal-template">
+		<div>
+			<h3 class="font-weight-normal mb-10px ml-20px">
+				{{title}}
+			</h3>
+			<div class="card block-wrapper">
+				<div class="row">
+					<div class="col">
+						<div class="row">
+							<div class="col-12 col-md-6"
+								 :class="responsiveClass" v-for="(block,i) in blocks">
+								<div :class="{'border-right-1px' : blocks.length > i + 1 }">
+									<div class="block-label mb-10px">
+										{{block.label}}
+									</div>
+									<div class="d-flex align-items-center mt-5px">
+										<ProgressProcent className="row-procent ml-0" :procent="block.totalProcent" />
+										<div class="ml-2 item-count">
+											{{ block.totalValue | numberWithCommas }}
+										</div>
+									</div>
+									<div class="d-flex align-items-center mt-5px" v-for="(gp,i) in block.indices" :key="i">
+										<div class="block-label w-80px">
+											{{ gp.label }}
+										</div>
+										<ProgressProcent className="row-procent" :procent="gp.procent" />
+										<div class="ml-2 item-count fz-20px cl-grey">
+											{{ gp.value | numberWithCommas }}
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="col-auto">
+						<div class="d-flex">
+							<div class="chart-label-info ml-auto d-flex align-items-center"
+								 @@click="infoClick">
+								<i data-feather="alert-circle"></i>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</script>
+	<script>
+		Vue.component('ColumnBlocksWithTotal', {
+			template: '#columnBlocksWithTotal-template',
+			props: {
+				title: String,
+				blocks: Array,
+				link: String
+			},
+			computed: {
+				responsiveClass() {
+					switch (this.blocks.length) {
+						case 1: {
+							return 'col-lg-12';
+						} case 2: {
+							return 'col-lg-6';
+						} case 3: {
+							return 'col-lg-4';
+						} default: {
+							return 'col-lg-3';
+						}
+					}
+				}
+			},
+			methods: {
+				infoClick() {
+					window.location.href = this.link;
+				}
+			}
+		});
+	</script>
+
+	@*Dashboard*@
+	<script type="text/x-template" id="dashboardLeads-template">
+		<div>
+			<div>
+				<PageOptionsBar :pageOptionsComponents="pageOptionsComponents"
+								:filters="tableFilters"
+								@@filterResult="filterResult" />
+				<div class="position-relative">
+					<div v-show="!dataLoaded" class="section-loader" style="min-height: 300px;"><Loader /></div>
+					<div v-if="dataLoaded" class="pl-5px">
+						<hr />
+						<h2 class="ml-40px mb-0">
+							Leads indicators
+						</h2>
+						<div class="container-fluid">
+							<div class="row">
+								<div class="col-12 col-lg-6 col-xl-4 mt-30px">
+									<DoughnutChart chartTitle="Potential clients count"
+												   id="leadCountChart"
+												   :labels="leadCountChart.labels"
+												   :datasets="leadCountChart.datasets"
+												   :totalCount="leadCountChart.totalCount"
+												   link="/crmreport?type=leads"
+												   :key="refresh" />
+								</div>
+								<div class="col-12 col-lg-6 col-xl-4 mt-30px">
+									<DoughnutChart chartTitle="New clients"
+												   id="newLeadChart"
+												   :labels="newLeadChart.labels"
+												   :datasets="newLeadChart.datasets"
+												   :totalCount="newLeadChart.totalCount"
+												   link="/crmreport?type=leads"
+												   :key="refresh" />
+								</div>
+								<div class="col-12 col-lg-6 col-xl-4 mt-30px">
+									<DoughnutChart chartTitle="Clients with WON status"
+												   id="wonLeadChart"
+												   :labels="wonLeadChart.labels"
+												   :datasets="wonLeadChart.datasets"
+												   :totalCount="wonLeadChart.totalCount"
+												   link="/crmreport?type=leads"
+												   :key="refresh" />
+								</div>
+								<div class="col-12 col-lg-6 col-xl-4 mt-30px">
+									<DoughnutChart chartTitle="New users TS/TM count"
+												   link="/crmreport?type=leads"
+												   id="clientsChart"
+												   :labels="clientsChart.labels"
+												   :datasets="clientsChart.datasets"
+												   :totalCount="clientsChart.totalCount"
+												   :key="refresh" />
+								</div>
+								<div class="col-12 col-lg-6 col-xl-4 mt-30px">
+									<DoughnutChart chartTitle="New locations count"
+												   id="afiliatesChart"
+												   :labels="afiliatesChart.labels"
+												   link="/crmreport?type=leads"
+												   :datasets="afiliatesChart.datasets"
+												   :totalCount="afiliatesChart.totalCount"
+												   :key="refresh" />
+								</div>
+								<div class="col-12 col-lg-6 col-xl-4 mt-30px">
+									<SimpleBlock title="Average commision Afiliat TME"
+												 label="Commisions sum"
+												 :procent="totalCommisionProgreess"
+												 :value="String(totalCommision) + ' %'"
+												 link="/crmreport?type=leads" />
+									<SimpleBlock className="mt-30px"
+												 title="Average commision value Afiliat TME"
+												 label="Commisions sum"
+												 :procent="avgAfiliatesValueProgreess"
+												 :value="String(avgAfiliatesValue) + ' MDL'"
+												 link="/crmreport?type=leads" />
+								</div>
+								<div class="col-12 mt-30px">
+									<ColumnsBlock title="Client TME"
+												  :blocks="[
+													{ label : 'New users count' , value: clientTME.newLead, procent: clientTME.newLeadProgress },
+													{ label : 'Preventive income' , value: clientTME.leadSum + ' MDL', procent: clientTME.leadSumProgress },
+													{ label : 'Average commision' , value: clientTME.averageCommission + ' %', procent: clientTME.averageCommissionProgress },
+													{ label : 'Comision' , value: clientTME.commission + ' MDL', procent: clientTME.commissionProgress }
+												  ]"
+												  link="/crmreport?type=leads" />
+								</div>
+								<div class="col-12 mt-30px">
+									<ColumnsBlock title="Client TS"
+												  :blocks="[
+													{ label : 'Clients count' , value: clientTS.newLead, procent: clientTS.newLeadProgress },
+													{ label : 'Number of Client TS' , value: clientTS.users, procent: clientTS.usersProgress },
+													{ label : 'Total sum' , value: clientTS.leadSum + ' MDL', procent: clientTS.leadSumProgress }
+												  ]"
+												  link="/crmreport?type=leads" />
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</script>
+	<script>
+		const utils = {
+			findObjectByPropValue: (array, value, prop) => {
+				return array.find(x => x[prop] === value);
+			},
+			groupBy: (array, key) => {
+				return array.reduce(function (result, x) {
+					(result[x[key]] = result[x[key]] || []).push(x);
+					return result;
+				}, {});
+			},
+			numberFormat(val, decimals) {
+				val = parseFloat(val)
+				return val.toFixed(decimals);
+			}
+		}
+		const dashboardConfig = {
+			colorset: [
+				'#2850F0',
+				'#FF2850',
+				'#FFD018',
+				'#20BC40',
+				'cyan'
+			]
+		}
+		Vue.component('DashboardLeads', {
+			template: "#dashboardLeads-template",
+			data() {
+				return {
+					refresh: 0,
+					pageOptionsComponents: [],
+					pageRequestFilters: [{
+						Propriety: "Period",
+						Value: 30
+					}],
+					dataLoaded: false,
+					geoPositions: [],
+					showFilters: false,
+					periods: [
+						{
+							active: false,
+							label: '7',
+							value: 7
+						},
+						{
+							active: true,
+							label: '30',
+							value: 30
+						},
+						{
+							active: false,
+							label: '90',
+							value: 90
+						}
+					],
+					leadCountChart: {},
+					newLeadChart: {},
+					wonLeadChart: {},
+					clientsChart: {},
+					afiliatesChart: {},
+					totalCommision: null,
+					totalCommisionProgreess: null,
+					avgAfiliatesValue: null,
+					avgAfiliatesValueProgreess: null,
+					clientTME: {},
+					clientTS: {},
+					//Payments indices
+					clientTMEPaymentsLine: {},
+					clientTMEClientsLine: {},
+					clientTSPaymentsLine: {},
+					clientTSClientsLine: {},
+					clientTMECards: [],
+					clientTMEtotal: [],
+					clientTSQtty: [],
+					clientTSPayments: [],
+					clientTMEAfiliatCount: [],
+					clientTSAfiliatCount: [],
+					//Total by geoPositions
+					totalCountTS: {},
+					totalCountTME: {},
+					isAdmin: false
+				}
+			},
+			computed: {
+				clientTMEtotalRender() {
+					let resArray = [];
+					this.clientTMEtotal.forEach(gp => {
+						resArray.push({
+							label: gp.geoPosition,
+							value: gp.value + ' MDL',
+							procent: gp.valueProgress
+						});
+					})
+					return resArray;
+				},
+				clientTStotalQtyRender() {
+					let resArray = [];
+					this.clientTSQtty.forEach(gp => {
+						resArray.push({
+							label: gp.geoPosition,
+							value: gp.value,
+							procent: gp.valueProgress
+						});
+					})
+					return resArray;
+				},
+				clientTStotalPyRender() {
+					let resArray = [];
+					this.clientTSPayments.forEach(gp => {
+						resArray.push({
+							label: gp.geoPosition,
+							value: gp.value + ' MDL',
+							procent: gp.valueProgress
+						});
+					})
+					return resArray;
+				},
+				clientTMECardsRender() {
+					let resArray = [];
+					this.clientTMECards.forEach(gp => {
+						resArray.push({
+							label: gp.geoPosition,
+							value: gp.value,
+							procent: gp.valueProgress
+						});
+					})
+					return resArray;
+				},
+				tableFilters() {
+					if (this.showFilters) {
+						return [
+							{
+								id: 'Period',
+								label: 'Period',
+								radio: true,
+								values: this.periods
+							}
+						]
+					} else {
+						return null;
+					}
+				}
+			},
+			created() {
+				this.showFilters = true;
+				this.getData();
+			},
+			methods: {
+				getIndicesFromArray(array, additionalString = null) {
+					let result = [];
+					array.forEach(gp => {
+						result.push({
+							label: gp.geoPosition,
+							value: additionalString ? `${gp.value} ${additionalString}` : gp.value,
+							procent: gp.valueProgress
+						});
+					});
+					return result;
+				},
+				getData() {
+					this.dataLoaded = false;
+					let promises = [
+						customAjaxRequest(apiEndpoints.CrmDashboard.GetLeadDashboardIndices, 'POST', { filters: this.pageRequestFilters }),
+					];
+					Promise.all(promises).then(result => {
+						//Leads indices
+						this.leadCountChart = this.generateDoughnutDataFromArray(result[0], 'leadCount');
+						this.newLeadChart = this.generateDoughnutDataFromArray(result[0], 'newLead');
+						this.wonLeadChart = this.generateDoughnutDataFromArray(result[0], 'wonLead');
+						//this.clientsChart = this.generateDoughnutDataFromArray(result[0], 'users', [dashboardConfig.workCategoryIds.clientTME, dashboardConfig.workCategoryIds.clientTS]);
+						//this.afiliatesChart = this.generateDoughnutDataFromArray(result[0], 'users', [dashboardConfig.workCategoryIds.afiliatTME, dashboardConfig.workCategoryIds.afiliatTS]);
+						//this.totalCommision = result[0].filter(e => e.workCategory.id === dashboardConfig.workCategoryIds.afiliatTME)[0].averageCommission;
+						//this.totalCommisionProgreess = result[0].filter(e => e.workCategory.id === dashboardConfig.workCategoryIds.afiliatTME)[0].averageCommissionProgress;
+						//this.avgAfiliatesValue = result[0].filter(e => e.workCategory.id === dashboardConfig.workCategoryIds.afiliatTME)[0].commission;
+						//this.avgAfiliatesValueProgreess = result[0].filter(e => e.workCategory.id === dashboardConfig.workCategoryIds.afiliatTME)[0].commissionProgress;
+						//this.clientTME = result[0].filter(e => e.workCategory.id === dashboardConfig.workCategoryIds.clientTME)[0];
+						//this.clientTS = result[0].filter(e => e.workCategory.id === dashboardConfig.workCategoryIds.clientTS)[0];
+						//Data loaded
+						this.dataLoaded = true;
+						this.refresh++;
+					});
+				},
+				getAvg(array, prop) {
+					let avg = 0;
+					let count = 0;
+					let total = 0;
+					array.forEach(e => {
+						total += e[prop];
+						count++;
+					});
+					avg = total / count;
+					return avg;
+				},
+				getTotal(array, prop) {
+					let total = 0;
+					array.forEach(e => {
+						total += e[prop];
+					});
+					return total;
+				},
+				generateDoughnutDataFromArray(arrayData, property, specifcIds = null) {
+					const propertyProgress = property + 'Progress';
+					let labels = [];
+					let totalCount = 0;
+					let datasets = [{
+						borderWidth: 0,
+						data: [],
+						backgroundColor: []
+					}];
+					const pushToDatasets = (r, i) => {
+						datasets[0].data.push(r[property]);
+						datasets[0].backgroundColor.push(dashboardConfig.colorset[i]);
+					}
+					const pushToLabels = (r, i) => {
+						labels.push({
+							count: r[property],
+							text: r.pipeLine,
+							color: dashboardConfig.colorset[i],
+							procent: r[propertyProgress]
+						});
+					}
+					let i = 0;
+					arrayData.forEach(r => {
+						if (specifcIds) {
+							pushToLabels(r, i);
+							pushToDatasets(r, i);
+							totalCount += r[property];
+							i++;
+						} else if (!specifcIds) {
+							pushToLabels(r, i);
+							pushToDatasets(r, i);
+							totalCount += r[property];
+							i++;
+						}
+					});
+					return {
+						labels,
+						datasets,
+						totalCount
+					}
+				},
+				convertWCToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id,
+							active: false
+						}
+						return newObj;
+					});
+				},
+				convertGPToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.text,
+							value: e.value,
+							active: false
+						}
+						return newObj;
+					});
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								let fValue = v.value;
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: fValue
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				},
+				generateDoughnutDataFromClientsArray(arrayData, property, specifcIds = null) {
+					const pushToDatasets = (r, i) => {
+						datasets[0].data.push(r);
+						datasets[0].backgroundColor.push(dashboardConfig.colorset[i]);
+					}
+					const pushToLabels = (r, i) => {
+						labels.push({
+							count: r.name,
+							text: r.count + ' MDL',
+							color: dashboardConfig.colorset[i],
+						});
+					}
+					let selectedData = [];
+					let labels = [];
+					let totalCount = 0;
+					let datasets = [{
+						borderWidth: 0,
+						data: [],
+						backgroundColor: []
+					}];
+
+					arrayData.forEach(r => {
+						if (specifcIds || !specifcIds) {
+							selectedData = selectedData.concat(r[property]);
+						}
+					});
+
+					const groupedData = utils.groupBy(selectedData, 'geoPosition');
+
+					let i = 0;
+					for (item in groupedData) {
+						let totalValue = 0;
+						groupedData[item].forEach(v => totalValue += v.value);
+						pushToLabels({
+							count: totalValue,
+							name: item
+						}, i);
+						pushToDatasets(totalValue, i);
+						totalCount += totalValue;
+						i++;
+					}
+
+					return {
+						labels,
+						datasets,
+						totalCount: utils.numberFormat(totalCount, 2) + ' MDL'
+					}
+				},
+				convertWCToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id,
+							active: false
+						}
+						return newObj;
+					});
+				},
+				convertGPToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.text,
+							value: e.value,
+							active: false
+						}
+						return newObj;
+					});
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								let fValue = v.value;
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: fValue
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				}
+			},
+			watch: {
+				pageRequestFilters: {
+					deep: true,
+					handler() {
+						this.getData();
+					}
+				}
+			}
+		});
+	</script>
+}

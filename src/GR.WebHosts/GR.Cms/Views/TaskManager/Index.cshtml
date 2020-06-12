@@ -1,0 +1,922 @@
+@{
+	ViewData["Title"] = "Task Manager";
+}
+@section Styles {
+}
+@inject IStringLocalizer Localizer
+
+<TaskManager />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script>
+		const taskDateFormat = 'YYYY/MM/DD';
+		const taskDatePickerFormat = 'yyyy/mm/dd';
+		Vue.component('TaskManager', {
+			template: `
+				<div>
+					<div v-show="!loadTable" class="page-loader"><Loader/></div>
+					<PageOptionsBar
+						v-if="loadTable && showFilters"
+						:searcheable="true"
+						:pageOptionsComponents="pageOptionsComponents"
+						@@searchInput="searchTable"
+						:filters="tableFilters"
+						@@filterResult="filterResult"
+					/>
+					<Table v-if="loadTable"
+						:fields="tableFields"
+						:apiUrl="apiUrl"
+						:httpMethod="httpMethod"
+						@@triggeredMenuAction="action"
+						tableId="task-table"
+						:sortOrder="tableConfig.sortCol"
+						:customQueryparams="customQueryparams"
+						:hasCustomQUeryparams="true"
+						:initialPageSize="20"
+						:reload="tableKey"
+						dataPath="result.result"
+						:actionsSingle="tableActions.single"
+						:actionsSingleDisabled="tableActions.singleDisabled"
+						:actionsMultiple="tableActions.multiple"
+						:actionsMultipleDisabled="tableActions.multipleDisabled"
+						:haveContextMenu="true"
+					>
+						<slot slot="assignedUsers" slot-scope="props">
+							<a
+								v-for="member in props.rowData.assignedUsers"
+								:key="member.id"
+								class="btn btn-outline-primary user-rectangle"
+								href="#"
+								@@click.stop.prevent
+								>
+								{{ initials(member.firstName, member.lastName) }}
+							</a>
+						</slot>
+						<slot slot="name" slot-scope="props">
+							<a :href="'/TaskManager/details?id=' + props.rowData.id" @@click.stop>
+								{{ props.rowData.name }}
+							</a>
+						</slot>
+						<slot slot="leadName" slot-scope="props">
+							<a v-if="props.rowData.leadId" :href="'/leads/details?id=' + props.rowData.leadId" target="_blank" @@click.stop>
+								{{ props.rowData.leadName }}
+							</a>
+						</slot>
+						<slot slot="organizationName" slot-scope="props">
+							<a v-if="props.rowData.organizationId" :href="'/organizations/details?id=' + props.rowData.organizationId" target="_blank" @@click.stop>
+								{{ props.rowData.organizationName }}
+							</a>
+						</slot>
+					</Table>
+					<Modal :modalProps="modalTaskProps" @@newValue="emitValueTask" :refreshInputs="refreshInputs" :inputsKey="modalTaskKey"/>
+					<Modal :modalProps="modalSetPriority" @@newValue="emitValueTask" :refreshInputs="refreshInputs" :inputsKey="modalPriorityKey"/>
+					<Modal :modalProps="modalUpdateStatus" @@newValue="emitValueTask" :refreshInputs="refreshInputs" :inputsKey="modalStatusKey"/>
+					<Modal :modalProps="modalRename" @@newValue="emitValueTask" :refreshInputs="refreshInputs" :inputsKey="modalRenameKey"/>
+				</div>
+			`,
+			data() {
+				return {
+					apiUrl: apiEndpoints.TaskManager.GetAllUsersTasks,
+					httpMethod: 'post',
+					loadTable: false,
+					tableFields: [
+						{
+							name: 'taskPriority',
+							title: 'Priority',
+							visible: true,
+							formatter: value => this.getPriorityBadge(this.taskPriorities.find(tp => tp.value == value)),
+							sortField: 'taskPriority'
+						},
+						{
+							name: 'taskNumber',
+							title: 'Number',
+							visible: true,
+							sortField: 'taskNumber',
+						},
+						{
+							name: 'name',
+							title: 'Name',
+							visible: true,
+							sortField: 'name'
+						},
+						{
+							name: 'organizationName',
+							title: 'Organization',
+							sortField: 'organizationName',
+							visible: true
+						},
+						{
+							name: 'leadName',
+							title: 'Lead',
+							visible: true,
+							sortField: 'leadName'
+						},
+						{
+							name: 'startDate',
+							title: 'Start date',
+							visible: true,
+							sortField: 'startDate'
+						},
+						{
+							name: 'endDate',
+							title: 'End date',
+							visible: true,
+							sortField: 'endDate'
+						},
+						{
+							name: 'assignedUsers',
+							visible: true,
+							title: 'Assigne',
+							dataClass: 'td-users'
+						},
+						{
+							name: 'status',
+							title: 'Status',
+							visible: true,
+							formatter: value => this.taskStatuses.find(ts => ts.value == value).label,
+							sortField: 'status'
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'taskPriority',
+								sortField: 'taskPriority',
+								direction: 'desc'
+							}
+						]
+					},
+					tableActions: {
+						single: {
+							"details": { name: "Details", icon: "details" },
+							"edit": { name: "Edit", icon: "edit" },
+							"rename": { name: "Rename", icon: "file" },
+							"setPriority": { name: "Set priority", icon: "filter" },
+							"updateStatus": { name: "Update status", icon: "repeat" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					pageRequestFilters: [],
+					tableKey: 0,
+					refreshInputs: 0,
+					editableTaskModal: false,
+					statuses: [],
+					priorities: [],
+					taskPriorities: [],
+					taskStatuses: [],
+					waitAddButton: false,
+					addAndNew: false,
+					usersSelectList: [],
+					listLeadsSelect: [],
+					taskTypes: [],
+					taskValues: {},
+					searchString: '',
+					showFilters: false,
+					modalTaskKey: 0,
+					modalPriorityKey: 0,
+					modalStatusKey: 0,
+					modalRenameKey: 0
+				}
+			},
+			computed: {
+				customQueryparams() {
+					const params = {
+						gSearch: this.searchString,
+						includeDeleted: true
+					};
+					this.pageRequestFilters.forEach((a,i) => {
+						for (pv in a) {
+							params[`pageRequestFilters[${i}][${pv}]`] = a[pv];
+						}
+					});
+					return params;
+				},
+				pageOptionsComponents() {
+					return [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add task',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableTaskModal = false;
+									this.waitAddButton = false;
+									this.resetTaskValues();
+									this.listLeadsSelect = this.allLeadsSelect;
+									this.modalTaskKey++;
+									this.refreshInputs++;
+									$(`#${this.modalTaskProps.id}`).modal("show");
+								}
+							}
+						}
+					]
+				},
+				modalTaskSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalTaskProps.id}`).modal("hide");
+								}
+							}
+						}];
+					if (!this.editableTaskModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.addAndNew = false;
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add & new',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.addAndNew = true;
+									}
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.addAndNew = false;
+									}
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalTasklabel() {
+					return this.editableTaskModal ? 'Edit task' : 'Add task';
+				},
+				modalTaskProps() {
+					return {
+						id: 'taskModal',
+						modalSize: '',
+						label: this.modalTasklabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'task-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									value: this.taskValues.name,
+									className: 'col-12',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-organizationId',
+									label: 'Organization',
+									options: this.organizationsSelect,
+									value: this.taskValues.organizationId,
+									size: 10,
+									searchable: true,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-leadId',
+									label: 'Lead',
+									options: this.listLeadsSelect,
+									value: this.taskValues.leadId,
+									size: 10,
+									searchable: true,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'task-startDate',
+									label: 'Start date',
+									required: true,
+									format: taskDatePickerFormat,
+									value: this.taskValues.startDate,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'task-endDate',
+									label: 'End date',
+									required: true,
+									format: taskDatePickerFormat,
+									value: this.taskValues.endDate,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-status',
+									label: 'Status',
+									options: this.taskStatuses,
+									value: this.taskValues.status,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-taskPriority',
+									label: 'Priority',
+									options: this.taskPriorities,
+									value: this.taskValues.taskPriority,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-taskTypeId',
+									label: 'Task type',
+									options: this.taskTypes,
+									value: this.taskValues.taskTypeId,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-userTeam',
+									label: 'Assigne',
+									searchable: true,
+									multiple: true,
+									options: this.usersSelectList,
+									value: this.taskValues.userTeam,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'task-description',
+									label: 'Description',
+									required: true,
+									value: this.taskValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: this.modalTaskSubmits,
+						onSubmit: () => {
+							if (!this.editableTaskModal) {
+								if (this.addAndNew) {
+									this.addNewTask().then(() => {
+										this.resetTaskValues();
+										this.refreshInputs++;
+									});
+								} else {
+									this.addNewTask().then(() => {
+										$(`#${this.modalTaskProps.id}`).modal("hide");
+									});
+								}
+							} else {
+								this.updateTask().then(() => {
+									$(`#${this.modalTaskProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+				modalSetPriority() {
+					return {
+						id: 'taskPriorityModal',
+						modalSize: 'sm',
+						label: 'Set priority',
+						formInputs: [
+							{
+								name: 'Select',
+								props: {
+									id: 'taskPriority',
+									label: 'Priority',
+									options: this.taskPriorities,
+									value: this.taskValues.taskPriority,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitAddButton,
+									onClick: () => {
+										$(`#${this.modalSetPriority.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+								}
+							}
+						],
+						onSubmit: () => {
+							this.updateTask().then(() => {
+								$(`#${this.modalSetPriority.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				modalUpdateStatus() {
+					return {
+						id: 'modalUpdateStatus',
+						modalSize: 'sm',
+						label: 'Update status',
+						formInputs: [
+							{
+								name: 'Select',
+								props: {
+									id: 'status',
+									label: 'Status',
+									options: this.taskStatuses,
+									value: this.taskValues.status,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitAddButton,
+									onClick: () => {
+										$(`#${this.modalUpdateStatus.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+								}
+							}
+						],
+						onSubmit: () => {
+							this.updateTask().then(() => {
+								$(`#${this.modalUpdateStatus.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				modalRename() {
+					return {
+						id: 'modalRename',
+						label: 'Set priority',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									value: this.taskValues.name,
+									className: 'col-12',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitAddButton,
+									onClick: () => {
+										$(`#${this.modalRename.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+								}
+							}
+						],
+						onSubmit: () => {
+							this.updateTask().then(() => {
+								$(`#${this.modalRename.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				taskPrioritiesFilter() {
+					let newArray = [];
+					this.taskPriorities.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				taskStatusesFilter() {
+					let newArray = [];
+					this.taskStatuses.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				usersListFilter() {
+					let newArray = [];
+					this.usersSelectList.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				tableFilters() {
+					return [
+						{
+							id: 'TaskPriority',
+							label: 'Task priority',
+							values: this.taskPrioritiesFilter
+						},
+						{
+							id: 'Status',
+							label: 'Task status',
+							values: this.taskStatusesFilter
+						},
+						{
+							id: 'AssignedUsers',
+							label: 'Assigned users',
+							values: this.usersListFilter
+						}
+					]
+				}
+			},
+			created() {
+				this.resetTaskValues();
+				this.refreshInputs++;
+				const promises = [
+					customAjaxRequest(apiEndpoints.TaskManager.GetTaskPriorityList),
+					customAjaxRequest(apiEndpoints.TaskManager.GetTaskStatusList),
+					customAjaxRequest(apiEndpoints.Users.GetUsers),
+					customAjaxRequest(apiEndpoints.Leads.GetAllLeads),
+					customAjaxRequest(apiEndpoints.Organization.GetAllOrganization),
+					customAjaxRequest(apiEndpoints.TaskType.GetAllTaskType)
+				];
+				Promise.all(promises).then(result => {
+					this.taskPriorities = this.convertArrayToSelectList(result[0], 'text', 'value', 'system_taskmanager_');
+					this.priorities = result[0];
+					this.taskStatuses = this.convertArrayToSelectList(result[1], 'text', 'value', 'system_taskmanager_');
+					this.statuses = result[1];
+					this.usersSelectList = this.convertUsersToSelectList(result[2]);
+					this.allLeadsSelect = this.convertArrayToSelectList(result[3], 'name', 'id');
+					this.listLeadsSelect = this.allLeadsSelect;
+					this.organizationsSelect = this.convertArrayToSelectList(result[4], 'name', 'id');
+					this.taskTypes = this.convertArrayToSelectList(result[5], 'name', 'id');
+					this.loadTable = true;
+					this.showFilters = true;
+				});
+			},
+			methods: {
+				async addNewTask() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.TaskManager.CreateTask, 'POST', this.taskValues).then(() => {
+							this.waitAddButton = false;
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							this.waitAddButton = false;
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async deleteTasks(tasks) {
+					tasks.forEach((id, i, a) => {
+						customAjaxRequest(apiEndpoints.TaskManager.DeleteTaskPermanent, 'POST', { id }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deactivateTasks(tasks) {
+					tasks.forEach((id, i, a) => {
+						customAjaxRequest(apiEndpoints.TaskManager.DeleteTask, 'POST', { id }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateTasks(tasks) {
+					tasks.forEach((id, i, a) => {
+						customAjaxRequest(apiEndpoints.TaskManager.RestoreTask, 'POST', { id }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async updateTask() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.TaskManager.UpdateTask, 'POST', this.taskValues).then(() => {
+							this.waitAddButton = false;
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							this.waitAddButton = false;
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async loadTask(id) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.TaskManager.GetTask, 'GET', { id }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(e);
+						});
+					});
+				},
+				getPriorityBadge(val) {
+					let badgeClass = 'badge-outline-default';
+					switch (val.value) {
+						case '0':
+							badgeClass= 'badge-outline-info';
+							break;
+						case '1':
+							badgeClass= 'badge-outline-primary';
+							break;
+						case '2':
+							badgeClass= 'badge-outline-warning';
+							break;
+						case '3':
+							badgeClass= 'badge-outline-danger';
+							break;
+					}
+					return `<span class="badge ${badgeClass}">${val.label}</span>`;
+				},
+				editTask(taskId) {
+					this.waitAddButton = false;
+					this.editableTaskModal = true;
+					this.loadTask(taskId).then(result => {
+						this.taskValues = {
+							id: result.id,
+							name: result.name,
+							description: result.description,
+							startDate: moment(result.startDate, 'DD.MM.YYYY').format(taskDateFormat),
+							endDate: moment(result.endDate, 'DD.MM.YYYY').format(taskDateFormat),
+							userTeam: result.userTeam,
+							leadId: result.leadId,
+							taskPriority: result.taskPriority,
+							status: result.status,
+							taskTypeId: result.taskTypeId
+						};
+						this.listLeadsSelect = this.allLeadsSelect;
+						this.modalTaskKey++;
+						this.refreshInputs++;
+						$(`#${this.modalTaskProps.id}`).modal("show");
+					});
+				},
+				renameTask(taskId) {
+					this.loadTask(taskId).then(result => {
+						this.taskValues = {
+							id: result.id,
+							name: result.name,
+							description: result.description,
+							startDate: moment(result.startDate, 'DD.MM.YYYY').format(taskDateFormat),
+							endDate: moment(result.endDate, 'DD.MM.YYYY').format(taskDateFormat),
+							userTeam: result.userTeam,
+							taskPriority: result.taskPriority,
+							status: result.status,
+							taskTypeId: result.taskTypeId
+						};
+						this.modalRenameKey++;
+						this.refreshInputs++;
+						$(`#${this.modalRename.id}`).modal("show");
+					});
+				},
+				setPriority(taskId) {
+					this.loadTask(taskId).then(result => {
+						this.taskValues = {
+							id: result.id,
+							name: result.name,
+							description: result.description,
+							startDate: moment(result.startDate, 'DD.MM.YYYY').format(taskDateFormat),
+							endDate: moment(result.endDate, 'DD.MM.YYYY').format(taskDateFormat),
+							userTeam: result.userTeam,
+							taskPriority: result.taskPriority,
+							status: result.status,
+							taskTypeId: result.taskTypeId
+						};
+						this.modalPriorityKey++;
+						this.refreshInputs++;
+						$(`#${this.modalSetPriority.id}`).modal("show");
+					});
+				},
+				updateStatusTask(taskId) {
+					this.loadTask(taskId).then(result => {
+						this.taskValues = {
+							id: result.id,
+							name: result.name,
+							description: result.description,
+							startDate: moment(result.startDate, 'DD.MM.YYYY').format(taskDateFormat),
+							endDate: moment(result.endDate, 'DD.MM.YYYY').format(taskDateFormat),
+							userTeam: result.userTeam,
+							taskPriority: result.taskPriority,
+							status: result.status,
+							taskTypeId: result.taskTypeId
+						};
+						this.modalStatusKey++;
+						this.refreshInputs++;
+						$(`#${this.modalUpdateStatus.id}`).modal("show");
+					});
+				},
+				resetTaskValues() {
+					this.taskValues = {
+						name: '',
+						description: '',
+						startDate: moment().format(taskDateFormat).toString(),
+						endDate: moment().add(1, 'h').format(taskDateFormat).toString(),
+						leadId: null,
+						userTeam: [],
+						taskPriority: '0',
+						status: '0',
+						organizationId: null,
+						taskTypeId: null
+					}
+				},
+				emitValueTask(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.taskValues[val.id.replace('task-', '')] = newVal;
+					if (val.id == 'task-organizationId') {
+						this.listLeadsSelect = [];
+						customAjaxRequest(apiEndpoints.Leads.GetLeadsByOrganizationId, 'GET', { organizationId: val.value }).then(result => {
+							this.listLeadsSelect = this.convertArrayToSelectList(result, 'name', 'id');
+							this.modalTaskKey++;
+						});
+					}
+				},
+				convertArrayToSelectList(array, textProp, valueProp, translatePrefix = null) {
+					return array.map(e => {
+						const text = e[textProp];
+						const newObj = {
+							label: translatePrefix ? window.translate(translatePrefix + text.toLowerCase()) : text,
+							value: e[valueProp]
+						}
+						return newObj;
+					});
+				},
+				convertUsersToSelectList(array) {
+					return array.map(e => {
+						return {
+							label: e.userFirstName ? `${e.userFirstName} ${e.userLastName}` : e.userName,
+							value: e.id
+						}
+					});
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateTasks(action.value);
+							break;
+						} case 'activate': {
+							this.activateTasks(action.value);
+							break;
+						} case 'edit': {
+							this.editTask(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteTasks(action.value);
+							break;
+						} case 'rename': {
+							this.renameTask(action.value[0]);
+							break;
+						} case 'setPriority': {
+							this.setPriority(action.value[0]);
+							break;
+						} case 'updateStatus': {
+							this.updateStatusTask(action.value[0]);
+							break;
+						} case 'details': {
+							window.location.href = '/taskmanager/details?id=' + action.value[0];
+							break;
+						}
+					}
+				},
+				initials(name, surname) {
+					return name && surname ? `${name.charAt(0)} ${surname.charAt(0)}` : 'UP';
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								let fValue = v.value;
+								if (f.id === 'Status') {
+									fValue = this.statuses.find(f=>f.value === fValue).text;
+								}
+								if (f.id === 'TaskPriority') {
+									fValue = this.priorities.find(f=>f.value === fValue).text;
+								}
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: fValue
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				}
+			}
+		});
+	</script>
+}

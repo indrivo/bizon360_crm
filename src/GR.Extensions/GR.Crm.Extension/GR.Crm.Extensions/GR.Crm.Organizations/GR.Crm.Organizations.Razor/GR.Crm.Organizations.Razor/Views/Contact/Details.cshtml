@@ -1,0 +1,14 @@
+﻿@using GR.Core.Extensions;
+@using GR.Crm.Organizations.Abstractions.ViewModels.ContactsViewModels;
+@model GetContactViewModel
+
+@{
+    ViewData["Title"] = Model.FirstName + ' ' + Model.LastName;
+}
+
+@section Scripts {
+<script>
+    const orgObject = `@Html.Raw(Model.SerializeAsJson())`;
+    console.log(JSON.parse(orgObject));
+</script>
+}

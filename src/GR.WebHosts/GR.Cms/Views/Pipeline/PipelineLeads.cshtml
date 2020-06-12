@@ -1,0 +1,1932 @@
+@using GR.Core.Extensions;
+@using GR.Crm.PipeLines.Abstractions.Models;
+@model PipeLine
+@{
+	ViewData["Title"] = Model.Name;
+}
+
+<Pipeline />
+
+@section Scripts {
+	<script src="https://unpkg.com/vue-draggable@1.0.9/lib/vue-draggable.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/textBlock.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script>
+		const pipeLineObj = JSON.parse(`@Html.Raw(Model.SerializeAsJson())`);
+		const taskDateFormat = 'YYYY/MM/DD';
+		const taskDatePickerFormat = 'yyyy/mm/dd';
+		const utils = {
+			convertToSelectList: array => {
+				return array.map(e => {
+					const newObj = {
+						label: e.name,
+						value: e.id
+					}
+					return newObj;
+				});
+			},
+			groupBy: (array, key) => {
+				return array.reduce(function (result, x) {
+					(result[x[key]] = result[x[key]] || []).push(x);
+					return result;
+				}, {});
+			},
+			findObjectByPropValue: (array, value, prop) => {
+				return array.find(x => x[prop] === value);
+			},
+			changeObjPropInArrayById: (array, value, prop, id, idProp) => {
+				for (var i in array) {
+					if (array[i][idProp] == id) {
+						array[i][prop] = value;
+						break;
+					}
+				}
+			},
+			setBodyProgressCursor() {
+				$("body").css("cursor", "progress");
+			},
+			unsetBodyProgressCursor() {
+				$("body").css("cursor", "default");
+			}
+		}
+		Vue.use(VueDraggable.default);
+		Vue.component('Pipeline', {
+			template: `
+			<div>
+				<div v-show="!dataLoaded" class="page-loader"><Loader/></div>
+				<PageOptionsBar
+					v-if="showFilters"
+					:searcheable="listView"
+					:pageOptionsComponents="pageOptionsComponents"
+					@@searchInput="searchTable"
+					:filters="tableFilters"
+					@@filterResult="filterResult"
+				/>
+				<div v-if="listView">
+					<Table
+						:fields="tableFields"
+						:apiUrl="apiUrl"
+						:httpMethod="httpMethod"
+						@@triggeredMenuAction="action"
+						tableId="organizations-table"
+						:sortOrder="tableConfig.sortCol"
+						:initialPageSize="20"
+						:reload="tableKey"
+						dataPath="result.result"
+						:customQueryparams="customQueryparams"
+						:hasCustomQUeryparams="true"
+						@@onLoad="fillLeads"
+						:actionsSingle="tableActions.single"
+						:actionsSingleDisabled="tableActions.singleDisabled"
+						:actionsMultiple="tableActions.multiple"
+						:actionsMultipleDisabled="tableActions.multipleDisabled"
+						:haveContextMenu="true"
+					>
+						<slot slot="name" slot-scope="props">
+							<a :href="'/leads/details?id=' + props.rowData.id" @@click.stop>
+								{{ props.rowData.name }}
+							</a>
+						</slot>
+						<slot slot="stage" slot-scope="props">
+							{{ props.rowData.stage.name }}
+						</slot>
+						<slot slot="workCategory" slot-scope="props">
+							{{ props.rowData.workCategory.name }}
+						</slot>
+						<slot slot="leadState" slot-scope="props">
+							<span class="badge" :class="'badge-' + props.rowData.leadState.stateStyleClass">
+								{{ t('lead_state_' + props.rowData.leadState.name) }}
+							</span>
+						</slot>
+						<slot slot="organizationName" slot-scope="props">
+							<a v-if="props.rowData.organizationId" :href="'/organizations/details?id=' + props.rowData.organizationId" target="_blank" @@click.stop>
+								{{ props.rowData.organizationName }}
+							</a>
+						</slot>
+					</Table>
+				</div>
+				<div v-else>
+					<PipelineGrid :key="tableKey" @@addLeadByStage="addLeadByStage" :pipelineId="pipelineId" :actions="tableActions.single" @@action="action"/>
+				</div>
+				<Modal :modalProps="modalLeadProps" @@newValue="emitValueLead" :refreshInputs="refreshInputs" :inputsKey="modalLeadKey"/>
+				<Modal :modalProps="modalStageLead" @@newValue="emitValueLeadChanges" :refreshInputs="refreshInputs" :inputsKey="modalStageKey"/>
+				<Modal :modalProps="modalStatusLead" @@newValue="emitValueLeadChanges" :refreshInputs="refreshInputs" :inputsKey="modalStatusKey"/>
+				<Modal :modalProps="modalTeamLead" @@newValue="emitValueLeadChanges" :refreshInputs="refreshInputs" :inputsKey="modalTeamKey"/>
+				<Modal :modalProps="modalTaskProps" @@newValue="emitValueTaskChanges" :refreshInputs="refreshInputs" :inputsKey="modalTaskKey"/>
+				<Modal :refreshInputs="refreshInputs" :modalProps="modalDocument" @@newValue="emitModalDocumentValue" :inputsKey="modalDocumentKey"/>
+				<Modal :refreshInputs="refreshInputs" :modalProps="modalsameOrgAgreements" :inputsKey="modalsameOrgKey"/>
+			</div>`,
+			data() {
+				return {
+					modalLeadKey: 0,
+					modalStageKey: 0,
+					modalStatusKey: 0,
+					modalTeamKey: 0,
+					modalTaskKey: 0,
+					modalDocumentKey: 0,
+					modalsameOrgKey: 0,
+					pipelineId: pipeLineObj.id,
+					//Table config
+					apiUrl: apiEndpoints.Leads.GetPaginatedLeadsByPipeLineId,
+					httpMethod: 'post',
+					tableFields: [
+						{
+							name: 'leadState',
+							title: 'State',
+							visible: true,
+						},
+						{
+							name: 'stage',
+							title: 'Stage',
+							visible: true
+						},
+						{
+							name: 'name',
+							title: 'Name',
+							sortField: 'name',
+							visible: true
+						},
+						{
+							name: 'organizationName',
+							title: 'Organization',
+							visible: true,
+							sortField: 'organizationName'
+						},
+						{
+							name: 'value',
+							title: 'Value',
+							visible: true
+						},
+						{
+							name: 'leadMembers',
+							title: 'Owner',
+							visible: true,
+							dataClass: 'td-users',
+							formatter: value => {
+								if (value) {
+									return `
+										<a class="btn btn-outline-primary user-rectangle"
+										   href="#"
+										   title="${this.extractTeamOwnerName(value).fullName}"
+										>
+											${this.extractTeamOwnerName(value).initials}
+										</a>
+									`;
+								} else {
+									return '';
+								}
+							}
+						},
+						{
+							name: 'leadMembers',
+							title: 'Members',
+							visible: true,
+							dataClass: 'td-users',
+							formatter: value => {
+								if (value) {
+									const members = this.extractTeam(value, this.defaultTeamRoleId);
+									let markup = '';
+									members.forEach(m => {
+										markup += `
+											<a class="btn btn-outline-primary user-rectangle"
+											   href="#"
+											   title="${m.fullName}"
+											>
+												${m.initials}
+											</a>
+										`;
+									});
+									return markup;
+								} else {
+									return '';
+								}
+							}
+						},
+						{
+							name: 'created',
+							title: 'Created date',
+							sortField: 'created',
+							visible: true,
+						},
+						{
+							name: 'deadLine',
+							title: 'End date',
+							sortField: 'deadLine',
+							visible: true,
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'name',
+								sortField: 'name',
+								direction: 'asc'
+							}
+						]
+					},
+					tableKey: 0,
+					tableActions: {
+						single: {
+							"details": { name: "Details", icon: "details" },
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" },
+							"moveToStage": { name: "Move to stage", icon: "move" },
+							"updateStatus": { name: "Change state", icon: "repeat" },
+							"setTeam": { name: "Set members", icon: "user-plus" },
+							"generateDoc": { name: "Generate document", icon: "file-plus" },
+							"addTask": { name: "Add task", icon: "list" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					pageRequestFilters: [],
+					showFilters: false,
+					//Page config
+					listView: true,
+					//Lead modal
+					leadValues: {
+						name: null,
+						organizationId: null,
+						pipeLineId: pipeLineObj.id,
+						stageId: null,
+						leadStateId: null,
+						value: null,
+						currencyCode: null,
+						created: moment().format(taskDateFormat).toString(),
+						deadLine: moment().add(5, 'd').format(taskDateFormat).toString(),
+						members: [],
+						owner: null,
+					},
+					isAddByStage: false,
+					currentStage: '',
+					editableLeadModal: false,
+					waitAddButton: false,
+					continueAddModal: false,
+					//Stage modal
+					waitStageAddButton: false,
+					//Status modal
+					waitStatusAddButton: false,
+					//Team modal
+					waitTeamAddButton: false,
+					membersUsers: [],
+					//Task modal
+					taskValues: {},
+					taskPriorities: [],
+					taskStatuses: [],
+					waitTaskAddButton: false,
+					//Default role id
+					defaultOwnerRoleId: '11447a80-eff9-4f68-b24f-353ab2d5ee92',
+					defaultTeamRoleId: 'c92e023d-6804-43e8-88a8-ec807427d850',
+					//Generate document modal
+					allAgreements: [],
+					sameOrgAgreementId: null,
+					waitAddButtonDocument: false,
+					documentValues: {},
+					documentLeadsSelect: [],
+					contractTemplatesSelect: [],
+					organisationAddressesSelect: [],
+					organisationContactsSelect: [],
+					productsSelect: [],
+					//Other
+					contactsListSelect: [],
+					productTypesListSelect: [],
+					serviceTypesListSelect: [],
+					solutionTypesListSelect: [],
+					sourceTypesListSelect: [],
+					technologyTypesListSelect: [],
+					organizationsListSelect: [],
+					pipelinesListSelect: [],
+					leadStatesSelect: [],
+					currenciesListSelect: [],
+					usersListSelect: [],
+					users: [],
+					leads: [],
+					refreshInputs: 0,
+					usersSelectList: [],
+					searchString: '',
+					dataLoaded: false
+				};
+			},
+			computed: {
+				pageOptionsComponents(){
+					return [
+						{
+							name: 'Button',
+							props: {
+								label: '',
+								btnType: this.listView ? 'primary' : 'outline-primary',
+								className: 'ml-auto' + (this.listView ? ' list-btn active' : ' list-btn'),
+								onClick: () => {
+									this.tableKey++;
+									this.listView = true;
+								}
+							}
+						},
+						{
+							name: 'Button',
+							props: {
+								label: '',
+								btnType: this.listView ? 'outline-primary' : 'primary',
+								className: this.listView ? 'grid-btn' : 'grid-btn active',
+								onClick: () => {
+									this.listView = false;
+								}
+							}
+						},
+						{
+							name: 'Button',
+							props: {
+								label: 'Add lead',
+								btnType: 'success',
+								className: 'ml-3',
+								onClick: () => {
+									this.organisationContactsSelect = [];
+									this.resetLeadModalValues();
+									this.editableLeadModal = false;
+									this.isAddByStage = false;
+									this.modalLeadKey++;
+									this.refreshInputs++;
+									$(`#${this.modalLeadProps.id}`).modal("show");
+								}
+							}
+						}
+					]
+				},
+				modalFormSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								waiting: this.waitAddButton,
+								onClick: () => {
+									$(`#${this.modalLeadProps.id}`).modal("hide");
+								}
+							}
+						}
+					];
+					if (!this.editableLeadModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.continueAddModal = false;
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add & new',
+									waiting: this.waitAddButton,
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onMouseDown: async () => {
+										this.continueAddModal = true;
+									}
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									onMouseDown: () => {
+										this.continueAddModal = false;
+									}
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalLeadProps() {
+					return {
+						id: 'addLead',
+						modalSize: 'lg',
+						label: this.editableLeadModal ? 'Edit lead' : 'Add lead',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'lead-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									className: 'col-12',
+									value: this.leadValues.name,
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'lead-created',
+									label: 'Start date',
+									disabled: true,
+									className: 'col-12 col-md-6',
+									format: taskDatePickerFormat,
+									value: this.leadValues.created
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'lead-deadLine',
+									label: 'End date',
+									required: true,
+									className: 'col-12 col-md-6',
+									format: taskDatePickerFormat,
+									value: this.leadValues.deadLine
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'lead-clarificationDeadline',
+									label: 'Clarification deadline',
+									required: true,
+									className: 'col-12',
+									format: taskDatePickerFormat,
+									value: this.leadValues.clarificationDeadline
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-organizationId',
+									label: 'Organization',
+									required: true,
+									size: 10,
+									searchable: true,
+									options: this.organizationsListSelect,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.organizationId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-contactId',
+									label: 'Contact',
+									options: this.organisationContactsSelect,
+									noneSelectedText: this.organisationContactsSelect.length > 0 ? 'Nothing selected' : 'Plese select organization with contacts',
+									className: 'col-12 col-md-6',
+									size: 10,
+									searchable: true,
+									value: this.leadValues.contactId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-pipeLineId',
+									label: 'PipeLine',
+									required: true,
+									disabled: true,
+									options: this.pipelinesListSelect,
+									className: 'col-12',
+									value: this.leadValues.pipeLineId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-stageId',
+									label: 'Stage',
+									required: true,
+									disabled: this.isAddByStage,
+									options: this.pipelineStagesListSelect,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.stageId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-leadStateId',
+									label: 'Lead state',
+									required: true,
+									options: this.leadStatesSelect,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.leadStateId
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-productTypeId',
+									label: 'Product type',
+									options: this.productTypesListSelect,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.productTypeId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-serviceTypeId',
+									label: 'Service type',
+									options: this.serviceTypesListSelect,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.serviceTypeId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-solutionTypeId',
+									label: 'Solution type',
+									options: this.solutionTypesListSelect,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.solutionTypeId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-sourceId',
+									label: 'Source type',
+									options: this.sourceTypesListSelect,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.sourceId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-technologyTypeId',
+									label: 'Technology type',
+									options: this.technologyTypesListSelect,
+									className: 'col-12',
+									value: this.leadValues.technologyTypeId
+								}
+							},
+							{
+								name: 'hr',
+								props: {
+									class: 'line-between-inputs'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'lead-value',
+									label: 'Value',
+									type: 'text',
+									className: 'col-12 col-md-6',
+									value: this.leadValues.value,
+									validator: value => fieldValidationFunc(value, 'naturalNum'),
+									validatorInput: value => fieldValidationInputFunc(value, 'naturalNum')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-currencyCode',
+									label: 'Currency',
+									options: this.currenciesListSelect,
+									size: 10,
+									searchable: true,
+									className: 'col-12 col-md-6',
+									value: this.leadValues.currencyCode
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-owner',
+									label: 'Owner',
+									required: true,
+									options: this.usersListSelect,
+									value: this.leadValues.owner,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'lead-members',
+									label: 'Members',
+									multiple: true,
+									searchable: true,
+									options: this.membersUsers,
+									value: this.leadValues.members,
+									className: 'col-12'
+								}
+							},
+						],
+						formSubmits: this.modalFormSubmits,
+						onSubmit: () => {
+							if (!this.editableLeadModal) {
+								this.addNewLead().then(() => {
+									if (this.continueAddModal) {
+										this.resetLeadModalValues();
+									} else {
+										$(`#${this.modalLeadProps.id}`).modal("hide");
+									}
+								});
+							} else {
+								this.updateLead().then(() => {
+									$(`#${this.modalLeadProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+				modalStageLead() {
+					return {
+						id: 'stageLead',
+						modalSize: 'sm',
+						label: 'Change lead stage',
+						formInputs: [
+							{
+								name: 'Select',
+								props: {
+									id: 'stageId',
+									label: 'Pipeline stage',
+									required: true,
+									options: this.pipelineStagesListSelect,
+									className: 'col-12',
+									value: this.leadValues.stageId
+								}
+							},
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitStageAddButton,
+									onClick: () => {
+										$(`#${this.modalStageLead.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									waiting: this.waitStageAddButton,
+									btnType: 'success',
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.updateLeadStage().then(() => {
+								$(`#${this.modalStageLead.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				modalStatusLead() {
+					return {
+						id: 'statusLead',
+						modalSize: 'sm',
+						label: 'Change lead state',
+						formInputs: [
+							{
+								name: 'Select',
+								props: {
+									id: 'leadStateId',
+									label: 'Lead state',
+									required: true,
+									options: this.leadStatesSelect,
+									className: 'col-12',
+									value: this.leadValues.leadStateId
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitStatusAddButton,
+									onClick: () => {
+										$(`#${this.modalStatusLead.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitStatusAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.updateLeadStatus().then(() => {
+								$(`#${this.modalStatusLead.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				modalDocument() {
+					return {
+						id: 'documentModal',
+						label: 'Generate document',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'agreement-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									className: 'col-12',
+									value: this.documentValues.name,
+									validator: value => fieldValidationFunc(value, 'varChar128'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar128')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-contractTemplateId',
+									label: 'Template Contract',
+									required: true,
+									options: this.contractTemplatesSelect,
+									className: 'col-12',
+									value: this.documentValues.contractTemplateId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-organizationId',
+									label: 'Organization',
+									required: true,
+									disabled: true,
+									options: this.organizationsListSelect,
+									size: 10,
+									searchable: true,
+									className: 'col-12',
+									value: this.documentValues.organizationId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-leadId',
+									label: 'Lead',
+									required: true,
+									disabled: true,
+									size: 10,
+									searchable: true,
+									options: this.documentLeadsSelect,
+									className: 'col-12',
+									value: this.documentValues.leadId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-organizationAddressId',
+									label: 'Organization address',
+									required: true,
+									options: this.organisationAddressesSelect,
+									size: 10,
+									searchable: true,
+									className: 'col-12',
+									value: this.documentValues.organizationAddressId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-contactId',
+									label: 'Contact',
+									required: true,
+									size: 10,
+									searchable: true,
+									options: this.organisationContactsSelect,
+									className: 'col-12 col-md-6',
+									value: this.documentValues.contactId
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'agreement-commission',
+									label: 'Commission',
+									type: 'text',
+									required: true,
+									inputSuffix: '%',
+									className: 'col-12 col-md-6',
+									value: this.documentValues.commission
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-userId',
+									label: 'Responsible',
+									required: true,
+									size: 10,
+									searchable: true,
+									options: this.usersListSelect,
+									className: 'col-12 col-md-6',
+									value: this.documentValues.userId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-productId',
+									label: 'Product',
+									required: true,
+									size: 10,
+									searchable: true,
+									options: this.productsSelect,
+									className: 'col-12 col-md-6',
+									value: this.documentValues.productId
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'agreement-description',
+									label: 'Description',
+									required: true,
+									value: this.documentValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										$(`#${this.modalDocument.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Generate',
+									btnType: 'success',
+									waiting: this.waitAddButtonDocument,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.checkForDuplicateAndAdd().then(id => {
+								this.documentValues.id = id;
+								this.modalsameOrgKey++;
+								$(`#${this.modalDocument.id}`).modal("hide");
+								$(`#${this.modalsameOrgAgreements.id}`).modal("show");
+							}).catch(() => {
+								this.addNewDocument().then(() => {
+									$(`#${this.modalDocument.id}`).modal("hide");
+								});
+							});
+						}
+					}
+				},
+				modalsameOrgAgreements() {
+					return {
+						id: 'orgAgreementsModal',
+						label: 'Attention!',
+						formInputs: [
+							{
+								name: 'TextBlock',
+								props: {
+									value: `Contract for this Organization just exist. Do you want to overwrite it?`
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Yes',
+									btnType: 'warning',
+									onClick: () => {
+										this.documentValues.id = this.sameOrgAgreementId;
+										this.updateDocument().then(() => {
+											$(`#${this.modalsameOrgAgreements.id}`).modal("hide");
+										});
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									onClick: () => {
+										this.modalDocumentKey++;
+										$(`#${this.modalsameOrgAgreements.id}`).modal("hide");
+										$(`#${this.modalDocument.id}`).modal("show");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save as new',
+									btnType: 'success',
+									onClick: () => {
+										this.addNewDocument().then(() => {
+											$(`#${this.modalsameOrgAgreements.id}`).modal("hide");
+										});
+									}
+								}
+							},
+						]
+					}
+				},
+				modalTeamLead() {
+					return {
+						id: 'leadTeam',
+						label: 'Set lead members',
+						formInputs: [
+							{
+								name: 'Select',
+								props: {
+									id: 'owner',
+									label: 'Owner',
+									required: true,
+									options: this.usersListSelect,
+									value: this.leadValues.owner,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'members',
+									label: 'Members',
+									multiple: true,
+									searchable: true,
+									options: this.membersUsers,
+									value: this.leadValues.members,
+									className: 'col-12'
+								}
+							},
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitTeamAddButton,
+									onClick: () => {
+										$(`#${this.modalTeamLead.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitTeamAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							this.setLeadOwner(this.leadValues.owner, this.leadValues.id, this.leadValues.members).then(() => {
+								$(`#${this.modalTeamLead.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				modalTaskProps() {
+					return {
+						id: 'taskModal',
+						label: 'Add task to lead',
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'task-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									value: this.taskValues.name,
+									className: 'col-12',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-leadId',
+									label: 'Lead',
+									options: [{
+										label: this.leadValues.name,
+										value: this.leadValues.id
+									}],
+									value: this.leadValues.id,
+									disabled: true,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'task-startDate',
+									label: 'Start date',
+									required: true,
+									format: taskDatePickerFormat,
+									value: this.taskValues.startDate,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'task-endDate',
+									label: 'End date',
+									required: true,
+									format: taskDatePickerFormat,
+									value: this.taskValues.endDate,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-status',
+									label: 'Status',
+									options: this.taskStatuses,
+									value: this.taskValues.status,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-taskPriority',
+									label: 'Priority',
+									options: this.taskPriorities,
+									value: this.taskValues.taskPriority,
+									className: 'col-12 col-md-6'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'task-userTeam',
+									label: 'Assigne',
+									searchable: true,
+									multiple: true,
+									options: this.usersSelectList,
+									value: this.taskValues.userTeam,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'task-description',
+									label: 'Description',
+									required: true,
+									value: this.taskValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalTaskProps.id}`).modal("hide");
+								}
+							}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitTaskAddButton
+								}
+							}
+						],
+						onSubmit: () => {
+							this.addNewTask().then(() => {
+								$(`#${this.modalTaskProps.id}`).modal("hide");
+							});
+						}
+					}
+				},
+				customQueryparams() {
+					const params = {
+						pipelineId: pipeLineObj.id,
+						gSearch: this.searchString,
+						includeDeleted: true
+					};
+					this.pageRequestFilters.forEach((a,i) => {
+						for (pv in a) {
+							params[`pageRequestFilters[${i}][${pv}]`] = a[pv];
+						}
+					});
+					return params;
+				},
+				usersListFilter() {
+					let newArray = [];
+					this.usersListSelect.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				leadStatesFilter() {
+					let newArray = [];
+					this.leadStatesSelect.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				tableFilters() {
+					if (this.listView) {
+						return [
+							{
+								id: 'Owner',
+								label: 'Owner',
+								values: this.usersListFilter
+							},
+							{
+								id: 'LeadStateId',
+								label: 'State',
+								values: this.leadStatesFilter
+							}
+						]
+					} else {
+						return null;
+					}
+				},
+			},
+			created() {
+				this.resetTaskValues();
+				this.resetDocumentValues();
+				const promises = [
+					customAjaxRequest(apiEndpoints.PipeLines.GetPipeLineStages, 'get', { pipeLineId: this.pipelineId }),
+					customAjaxRequest(apiEndpoints.Organization.GetAllOrganization),
+					customAjaxRequest(apiEndpoints.Users.GetUsers),
+					customAjaxRequest(apiEndpoints.Leads.GetAllLeadStates),
+					customAjaxRequest(apiEndpoints.PipeLines.GetAll),
+					customAjaxRequest(apiEndpoints.CrmCommon.GetAllCurrencies),
+					customAjaxRequest(apiEndpoints.Contract.GetAllContractTemplate),
+					customAjaxRequest(apiEndpoints.Product.GetAllProducts),
+					customAjaxRequest(apiEndpoints.Agreement.GetAllAgreements),
+					customAjaxRequest(apiEndpoints.TaskManager.GetTaskPriorityList),
+					customAjaxRequest(apiEndpoints.TaskManager.GetTaskStatusList),
+					customAjaxRequest(apiEndpoints.CrmVocabularies.GetAllProductType),
+					customAjaxRequest(apiEndpoints.CrmVocabularies.GetAllServiceType),
+					customAjaxRequest(apiEndpoints.CrmVocabularies.GetAllSolutionType),
+					customAjaxRequest(apiEndpoints.CrmVocabularies.GetAllSourcesAsync),
+					customAjaxRequest(apiEndpoints.CrmVocabularies.GetAllTechnologyType)
+				];
+				Promise.all(promises).then(result => {
+					this.pipelineStagesListSelect = utils.convertToSelectList(result[0]);
+					this.organizationsListSelect = utils.convertToSelectList(result[1]);
+					this.usersListSelect = this.convertUsersToSelectList(result[2]);
+					this.membersUsers = this.convertUsersToSelectList(result[2]);
+					this.usersSelectList = this.convertUsersToSelectList(result[2]);
+					this.leadStatesSelect = utils.convertToSelectList(result[3]);
+					this.pipelinesListSelect = utils.convertToSelectList(result[4]);
+					this.currenciesListSelect = this.convertCurrenciesToSelectList(result[5]);
+					this.contractTemplatesSelect = this.convertToSelectList(result[6]);
+					this.productsSelect = this.convertToSelectList(result[7]);
+					this.allAgreements = result[8];
+					this.taskPriorities = this.convertArrayToSelectList(result[9], 'text', 'value', 'system_taskmanager_');
+					this.taskStatuses = this.convertArrayToSelectList(result[10], 'text', 'value', 'system_taskmanager_');
+					this.productTypesListSelect = this.convertArrayToSelectList(result[11], 'name', 'id');
+					this.serviceTypesListSelect = this.convertArrayToSelectList(result[12], 'name', 'id');
+					this.solutionTypesListSelect = this.convertArrayToSelectList(result[13], 'name', 'id');
+					this.sourceTypesListSelect = this.convertArrayToSelectList(result[14], 'name', 'id');
+					this.technologyTypesListSelect = this.convertArrayToSelectList(result[15], 'name', 'id');
+					this.showFilters = true;
+					this.dataLoaded = true;
+				});
+			},
+			methods: {
+				async checkForDuplicateAndAdd() {
+					const orgId = this.documentValues.organizationId;
+					let sameOrgAgreements = this.allAgreements.filter(a => a.organizationId === orgId);
+					sameOrgAgreements = sameOrgAgreements.sort((x, y) => {
+						return moment(x.created, 'DD.MM.YYYY').isAfter(y.creted, 'DD.MM.YYYY') ? -1 : 1;
+					});
+					return new Promise((resolve, reject) => {
+						if (sameOrgAgreements.length > 0) {
+							this.sameOrgAgreementId = sameOrgAgreements[0].id;
+							resolve(true);
+						} else {
+							reject(false);
+						}
+					});
+				},
+				async addNewDocument() {
+					this.waitAddButtonDocument = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Agreement.AddAgreement, 'PUT', this.documentValues).then(agreementId => {
+							window.open(`${window.location.origin}${apiEndpoints.Agreement.GenerateFileContractForAgreement}?agreementId=${agreementId}`, '_blank');
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButtonDocument = false;
+						});
+					});
+				},
+				async updateDocument() {
+					this.waitAddButtonDocument = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Agreement.UpdateAgreement, 'POST', this.documentValues).then(() => {
+							window.open(`${window.location.origin}${apiEndpoints.Agreement.GenerateFileContractForAgreement}?agreementId=${this.documentValues.id}`, '_blank');
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButtonDocument = false;
+						});
+					});
+				},
+				async addNewTask() {
+					this.waitTaskAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.TaskManager.CreateTask, 'POST', this.taskValues).then(() => {
+							this.waitTaskAddButton = false;
+							resolve(true);
+						}).catch(e => {
+							this.waitTaskAddButton = false;
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async addNewLead() {
+					this.waitAddButton = true;
+					for (prop in this.leadValues) {
+						if (this.leadValues[prop] === null) {
+							delete this.leadValues[prop];
+						}
+					}
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.AddLead, 'PUT', this.leadValues).then(leadId => {
+							if (this.leadValues.owner) {
+								this.setLeadOwner(this.leadValues.owner, leadId, this.leadValues.members).then(() => {
+									resolve(true);
+									this.waitAddButton = false;
+								});
+							} else {
+								this.tableKey++;
+								resolve(true);
+								this.waitAddButton = false;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateLeads(leads) {
+					leads.forEach((leadId, i, a) => {
+						customAjaxRequest(apiEndpoints.Leads.DisableLead, 'DELETE', { leadId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteLeads(leads) {
+					leads.forEach((leadId, i, a) => {
+						customAjaxRequest(apiEndpoints.Leads.DeleteLead, 'DELETE', { leadId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateLeads(leads) {
+					leads.forEach((leadId, i, a) => {
+						customAjaxRequest(apiEndpoints.Leads.ActivateLead, 'DELETE', { leadId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async updateLead() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.UpdateLead, 'POST', this.leadValues).then(() => {
+							if (this.leadValues.owner) {
+								this.setLeadOwner(this.leadValues.owner, this.leadValues.id, this.leadValues.members);
+							} else {
+								this.tableKey++;
+							}
+							resolve(true);
+							this.waitAddButton = false;
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateLeadStage() {
+					this.waitStageAddButton = true;
+					const values = {
+						leadId: this.leadValues.id,
+						stageId: this.leadValues.stageId
+					}
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.MoveLeadToStage, 'POST', values).then(() => {
+							this.tableKey++;
+							this.waitStageAddButton = false;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							this.waitStageAddButton = false;
+							reject(false);
+						});
+					});
+				},
+				async updateLeadStatus() {
+					this.waitStatusAddButton = true;
+					const values = {
+						leadId: this.leadValues.id,
+						stateId: this.leadValues.leadStateId
+					}
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.ChangeLeadState, 'POST', values).then(() => {
+							this.tableKey++;
+							this.waitStatusAddButton = false;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							this.waitStatusAddButton = false;
+							reject(false);
+						});
+					});
+				},
+				async setLeadOwner(ownerId, leadId, listMembersId = []) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.SetLeadMembers, 'POST', { ownerId, leadId, listMembersId }).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async loadLead(leadId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Leads.GetLeadById, 'GET', { leadId }).then(lead => {
+							resolve(lead);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				loadOrganizationContacts(organizationId) {
+					customAjaxRequest(apiEndpoints.Contact.GetContactByOrganizationId, 'GET', { organizationId }).then(result => {
+						this.organisationContactsSelect = this.convertContactsToSelectList(result);
+							this.modalLeadKey++;
+					});
+				},
+				loadOrganizationAddresses(organizationId) {
+					customAjaxRequest(apiEndpoints.OrganizationAddress.GetAddressesByOrganizationId, 'GET', { organizationId }).then(result => {
+						this.organisationAddressesSelect = this.convertAdddressToSelectList(result);
+					});
+				},
+				changeLeadStage(leadId) {
+					utils.setBodyProgressCursor();
+					this.loadLead(leadId).then(lead => {
+						this.leadValues = lead;
+						this.modalStageKey++;
+						$(`#${this.modalStageLead.id}`).modal("show");
+						utils.unsetBodyProgressCursor();
+					});
+				},
+				changeLeadStatus(leadId) {
+					utils.setBodyProgressCursor();
+					this.loadLead(leadId).then(lead => {
+						this.leadValues = lead;
+						this.modalStatusKey++;
+						$(`#${this.modalStatusLead.id}`).modal("show");
+						utils.unsetBodyProgressCursor();
+					});
+				},
+				addDocument(leadId) {
+					this.resetDocumentValues();
+					utils.setBodyProgressCursor();
+					this.loadLead(leadId).then(lead => {
+						this.documentValues.leadId = lead.id;
+						this.documentValues.organizationId = lead.organizationId;
+						this.documentLeadsSelect = [{
+							label: lead.name,
+							value: lead.id
+						}];
+						this.loadOrganizationAddresses(lead.organizationId);
+						this.loadOrganizationContacts(lead.organizationId);
+						this.modalDocumentKey++;
+						$(`#${this.modalDocument.id}`).modal("show");
+						utils.unsetBodyProgressCursor();
+					});
+				},
+				addTask(leadId) {
+					utils.setBodyProgressCursor();
+					this.loadLead(leadId).then(lead => {
+						this.leadValues = lead;
+						this.taskValues.leadId = lead.id;
+						this.modalTaskKey++;
+						$(`#${this.modalTaskProps.id}`).modal("show");
+						utils.unsetBodyProgressCursor();
+					});
+				},
+				changeLeadTeam(leadId) {
+					utils.setBodyProgressCursor();
+					this.loadLead(leadId).then(lead => {
+						this.leadValues = lead;
+						const owners = this.extractTeamIds(this.leadValues.leadMembers, this.defaultOwnerRoleId);
+						if (owners) {
+							this.leadValues.owner = owners[0];
+							utils.changeObjPropInArrayById(this.membersUsers, true, 'disabled', owners[0], 'value');
+						}
+						this.leadValues.members = this.extractTeamIds(this.leadValues.leadMembers, this.defaultTeamRoleId);
+						this.modalTeamKey++;
+						$(`#${this.modalTeamLead.id}`).modal("show");
+						utils.unsetBodyProgressCursor();
+					});
+				},
+				editLead(leadId) {
+					utils.setBodyProgressCursor();
+					this.editableLeadModal = true;
+					this.resetLeadModalValues;
+					this.refreshInputs++;
+					this.loadLead(leadId).then(value => {
+						this.leadValues = value;
+						delete this.leadValues.leadState;
+						const owners = this.extractTeamIds(this.leadValues.leadMembers, this.defaultOwnerRoleId);
+						if (owners) {
+							this.leadValues.owner = owners[0];
+							utils.changeObjPropInArrayById(this.membersUsers, true, 'disabled', owners[0], 'value');
+						}
+						this.leadValues.members = this.extractTeamIds(this.leadValues.leadMembers, this.defaultTeamRoleId);
+						this.leadValues.created = moment(this.leadValues.created, 'DD.MM.YYYY').format(taskDateFormat);
+						this.leadValues.deadLine = moment(this.leadValues.deadLine, 'DD.MM.YYYY').format(taskDateFormat);
+						this.leadValues.clarificationDeadline = moment(this.leadValues.clarificationDeadline, 'DD.MM.YYYY').format(taskDateFormat);
+						this.loadOrganizationContacts(value.organizationId);
+						customAjaxRequest(apiEndpoints.Organization.GetOrganizationById, 'GET', { organizationId: value.organizationId }).then(res => {
+							utils.unsetBodyProgressCursor();
+							this.modalLeadKey++;
+							$(`#${this.modalLeadProps.id}`).modal("show");
+						});
+						this.modalLeadKey++;
+					});
+				},
+				resetLeadModalValues() {
+					this.leadValues = {
+						name: null,
+						organizationId: null,
+						pipeLineId: pipeLineObj.id,
+						stageId: null,
+						leadStateId: null,
+						value: null,
+						currencyCode: null,
+						created: moment().format(taskDateFormat).toString(),
+						deadLine: moment().add(5, 'd').format(taskDateFormat).toString(),
+						members: [],
+						owner: null,
+						clarificationDeadline: moment().add(5, 'd').format(taskDateFormat).toString(),
+						contactId: null,
+						productTypeId: null,
+						serviceTypeId: null,
+						solutionTypeId: null,
+						sourceId: null,
+						technologyTypeId: null
+					}
+				},
+				resetTaskValues() {
+					this.taskValues = {
+						name: '',
+						description: '',
+						startDate: moment().format(taskDateFormat).toString(),
+						endDate: moment().add(1, 'h').format(taskDateFormat).toString(),
+						userTeam: [],
+						taskPriority: '0',
+						leadId: null,
+						status: '0'
+					}
+				},
+				resetDocumentValues() {
+					this.documentValues = {
+						name: null,
+						leadId: null,
+						organizationId: null,
+						contactId: null,
+						organizationAddressId: null,
+						userId: null,
+						contractTemplateId: null,
+						commission: null,
+						productId: null
+					}
+				},
+				emitValueLead(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.leadValues[val.id.replace('lead-', '')] = newVal;
+					if (val.id == 'lead-owner') {
+						this.membersUsers = this.membersUsers.map(m => {
+							m.disabled = false;
+							return m;
+						});
+						utils.changeObjPropInArrayById(this.membersUsers, true, 'disabled', newVal, 'value');
+						this.leadValues.members = this.leadValues.members.filter(m => {
+							return m != newVal;
+						});
+					}
+					if (val.id == 'lead-organizationId') {
+						this.loadOrganizationContacts(val.value);
+					}
+				},
+				emitValueLeadChanges(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.leadValues[val.id] = newVal;
+					if (val.id == 'owner') {
+						this.membersUsers = this.membersUsers.map(m => {
+							m.disabled = false;
+							return m;
+						});
+						utils.changeObjPropInArrayById(this.membersUsers, true, 'disabled', newVal, 'value');
+						this.leadValues.members = this.leadValues.members.filter(m => {
+							return m != newVal;
+						});
+					}
+				},
+				emitModalDocumentValue(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.documentValues[val.id.replace('agreement-', '')] = newVal;
+					if (val.id == 'agreement-organizationId') {
+						this.loadOrganizationAddresses(val.value);
+						this.loadOrganizationContacts(val.value);
+					}
+				},
+				emitValueTaskChanges(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.taskValues[val.id.replace('task-', '')] = newVal;
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertArrayToSelectList(array, textProp, valueProp, translatePrefix = null) {
+					return array.map(e => {
+						const text = e[textProp];
+						const newObj = {
+							label: translatePrefix ? window.translate(translatePrefix + text.toLowerCase()) : text,
+							disabled: false,
+							value: e[valueProp]
+						}
+						return newObj;
+					});
+				},
+				convertUsersToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.userFirstName ? `${e.userFirstName} ${e.userLastName}` : e.userName,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertCurrenciesToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: `${e.name}(${e.symbol})`,
+							value: e.code
+						}
+						return newObj;
+					});
+				},
+				convertContactsToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: `${e.firstName} ${e.lastName}`,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertAdddressToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: `r.${e.city.region.name}, ${e.city.name} ${e.street ? ', ' + e.street : ''}`,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateLeads(action.value);
+							break;
+						} case 'activate': {
+							this.activateLeads(action.value);
+							break;
+						} case 'edit': {
+							this.editLead(action.value[0]);
+							break;
+						} case 'addTask': {
+							this.addTask(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteLeads(action.value);
+							break;
+						} case 'moveToStage': {
+							this.changeLeadStage(action.value[0]);
+							break;
+						} case 'updateStatus': {
+							this.changeLeadStatus(action.value[0]);
+							break;
+						} case 'setTeam': {
+							this.changeLeadTeam(action.value[0]);
+							break;
+						} case 'generateDoc': {
+							this.addDocument(action.value[0]);
+							break;
+						} case 'details': {
+							window.location.href = '/leads/details?id=' + action.value[0];
+							break;
+						}
+					}
+				},
+				extractTeamOwnerName(team) {
+					let owner = utils.findObjectByPropValue(team, this.defaultOwnerRoleId, 'teamRoleId');
+					let teamOwnerName = {
+						initials: '',
+						fullName: '',
+					}
+					if (owner) {
+						teamOwnerName = {
+							initials: this.initials(owner.firstName, owner.lastName),
+							fullName: `${owner.firstName} ${owner.lastName}`
+						}
+					}
+					return teamOwnerName;
+				},
+				extractTeam(team, roleId) {
+					let returnArray = [];
+					team.forEach(m => {
+						if (m.teamRoleId == roleId) {
+							returnArray.push({
+								initials: this.initials(m.firstName, m.lastName),
+								fullName: `${m.firstName ? m.firstName : ''} ${m.lastName ? m.lastName : ''}`
+							});
+						}
+					});
+					return returnArray;
+				},
+				extractTeamIds(team, roleId) {
+					let returnArray = [];
+					if (team) {
+						team.forEach(m => {
+							if (m.teamRoleId == roleId) {
+								returnArray.push(m.userId);
+							}
+						});
+					}
+					return returnArray;
+				},
+				addLeadByStage(prop) {
+					this.resetLeadModalValues();
+					this.editableLeadModal = false;
+					this.isAddByStage = true;
+					this.currentStage = prop;
+					this.modalLeadKey++;
+					$(`#${this.modalLeadProps.id}`).modal("show");
+				},
+				initials(name, surname) {
+					return name && surname ? `${name.charAt(0)} ${surname.charAt(0)}` : '--';
+				},
+				fillLeads(leads) {
+					this.leads = leads;
+				},
+				t(key) {
+					return t(key)
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: v.value
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				}
+			}
+		});
+		Vue.component('PipelineGrid', {
+			template: `
+				<div v-drag-and-drop:options="dragOptions" class="pipeline-grid-leads d-flex mt-10px">
+					<div v-for="stage in pipelineStagesListSelect" :key="stage.value" :id="stage.value" class="pipeline-stage  flex-grow-1">
+						<div class="pipeline-stage-header pl-40px pr-30px py-3">
+							<div class="m-0 d-flex align-items-center">
+								<div>
+									<h5>
+										{{ findObjectByPropValue(pipelineStagesListSelect, stage.value, 'value').label }}
+									</h5>
+									<div class="term-field">
+										<span v-if="findObjectByPropValue(stages, stage.value, 'id').term">
+											{{ findObjectByPropValue(stages, stage.value, 'id').term }} days
+										</span>
+									</div>
+								</div>
+ 								<Button className="ml-auto add-btn" label="" btnType="outline-success" :onClick="() => addLeadByStage(stage.value)"/>
+							</div>
+						</div>
+						<ul class="pipeline-stage-leads w-100 h-100 mt-10px" :data-stage-id="stage.value">
+							<li class="pipeline-stage-lead bg-white rounded border px-20 py-3 mt-5px mr-10px ml-10px d-flex"
+								v-for="lead in allLeads[stage.value]"
+								:key="lead.id"
+								:data-lead-id="lead.id"
+							>
+								<div class="lead-details w-100">
+									<div class="deadline w-100 mh-20px">
+										<p class="p-sm mb-0">{{ lead.deadLine }}</p>
+									</div>
+									<div class="lead-name w-100">
+										{{ lead.name }}
+									</div>
+									<div class="d-flex">
+										<div class="lead-value">
+											{{ lead.value }}
+											<span v-if="lead.currency">
+											{{ lead.currency.symbol }}
+											</span>
+										</div>
+										<div class="lead-state ml-auto">
+											<span class="badge" :class="'badge-' + lead.leadState.stateStyleClass">{{ lead.leadState.name }}</span>
+										</div>
+									</div>
+								</div>
+								<div class="dropdown datatables-dropdown ml-auto">
+									<div class="more-vertical" data-toggle="dropdown"></div>
+									<div class="dropdown-menu dropdown-menu-right" x-placement="bottom-end">
+										<li v-for="(action, index, i) in actions"
+											:key="i"
+											class="position-relative pl-30px dropdown-item context-menu-icon"
+											:class="'context-menu-icon-' + action.icon"
+											@@click.stop.prevent="actionEmit(index, lead.id)"
+											data-toggle="dropdown"
+										>
+											<span>{{ action.name }}</span>
+										</li>
+									</div>
+								</div>
+							</li>
+						</ul>
+					</div>
+				</div>
+			`,
+			data() {
+				return {
+					dragOptions: {
+						dropzoneSelector: 'ul',
+						draggableSelector: 'li',
+						handlerSelector: null,
+						reactivityEnabled: true,
+						multipleDropzonesItemsDraggingEnabled: true,
+						showDropzoneAreas: true,
+						onDrop: function (event) {
+						},
+						onDragstart: function (event) { },
+						onDragenter: function (event) { },
+						onDragover: function (event) { },
+						onDragend: async function (event) {
+							const stageId = $(event.droptarget).data('stage-id');
+							const leadId = $(event.items[0]).data('lead-id');
+							customAjaxRequest(apiEndpoints.Leads.MoveLeadToStage, 'post', { leadId, stageId }).then().catch(e => {
+								event.stop();
+								toast.notifyErrorList(e);
+							})
+						}
+					},
+					pipelineStagesListSelect: [],
+					stages: [],
+					allLeads: [],
+				}
+			},
+			props: {
+				pipelineId: String,
+				actions: Object,
+			},
+			created() {
+				customAjaxRequest(apiEndpoints.PipeLines.GetPipeLineStages, 'get', { pipeLineId: this.pipelineId }).then(result => {
+					this.pipelineStagesListSelect = utils.convertToSelectList(result);
+					this.stages = result;
+				});
+				this.loadallLeads();
+			},
+			methods: {
+				loadallLeads() {
+					customAjaxRequest(apiEndpoints.Leads.GetAllLeads).then(result => {
+						this.allLeads = utils.groupBy(result, 'stageId');
+						this.leads = result;
+					});
+				},
+				findObjectByPropValue(array, value, prop) {
+					return utils.findObjectByPropValue(array, value, prop);
+				},
+				addLeadByStage(prop) {
+					this.$emit('addLeadByStage', prop);
+				},
+				actionEmit(key, id) {
+					this.$emit('action', { key, value: [id] });
+				}
+			}
+		});
+	</script>
+}

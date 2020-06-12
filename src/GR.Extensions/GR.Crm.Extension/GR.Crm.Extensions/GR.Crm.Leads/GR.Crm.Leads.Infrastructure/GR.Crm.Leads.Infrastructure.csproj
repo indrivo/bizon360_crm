@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\GR.Crm.Contracts\GR.Crm.Contracts.Abstractions\GR.Crm.Contracts.Abstractions.csproj" />
+    <ProjectReference Include="..\GR.Crm.Leads.Abstractions\GR.Crm.Leads.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

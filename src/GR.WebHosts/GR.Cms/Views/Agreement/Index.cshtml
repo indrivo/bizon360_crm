@@ -1,0 +1,802 @@
+@{
+	ViewData["Title"] = "Agreements";
+}
+
+<Agreements />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/textBlock.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/lib/es6-promise/es6-promise.auto.js"></script>
+	<script src="~/lib/jspdf/jspdf.min.js"></script>
+	<script src="~/lib/html2canvas/html2canvas.js"></script>
+	<script src="~/lib/html2pdf.js/html2pdf.bundle.js"></script>
+	<script>
+		Vue.component('Agreements', {
+			template: `
+				<div>
+					<div v-show="!loadTable" class="page-loader"><Loader/></div>
+					<PageOptionsBar
+						v-if="addEntityAvailable && showFilters"
+						:searcheable="true"
+						:pageOptionsComponents="pageOptionsComponents"
+						@@searchInput="searchTable"
+						:filters="tableFilters"
+						@@filterResult="filterResult"
+					/>
+					<div>
+						<Table
+							v-if="dataLoad"
+							:fields="tableFields"
+							:apiUrl="apiUrl"
+							:httpMethod="httpMethod"
+							@@triggeredMenuAction="action"
+							@@onLoad="tableLoad"
+							tableId="contacts-table"
+							:sortOrder="tableConfig.sortCol"
+							:customQueryparams="customQueryparams"
+							:hasCustomQUeryparams="true"
+							:initialPageSize="20"
+							:reload="tableKey"
+							dataPath="result.result"
+							:actionsSingle="tableActions.single"
+							:actionsSingleDisabled="tableActions.singleDisabled"
+							:actionsMultiple="tableActions.multiple"
+							:actionsMultipleDisabled="tableActions.multipleDisabled"
+							:haveContextMenu="true"
+						>
+							<slot slot="name" slot-scope="props">
+								<a :href="'/agreement/details?id=' + props.rowData.id" @@click.stop>
+									{{ props.rowData.name }}
+								</a>
+							</slot>
+							<slot slot="organizationName" slot-scope="props">
+								<a :href="'/organizations/details?id=' + props.rowData.organizationId" target="_blank" @@click.stop>
+									{{ props.rowData.organizationName }}
+								</a>
+							</slot>
+							<slot slot="leadName" slot-scope="props">
+								<a :href="'/leads/details?id=' + props.rowData.leadId" target="_blank" @@click.stop>
+									{{ props.rowData.leadName }}
+								</a>
+							</slot>
+						</Table>
+					</div>
+					<Modal :refreshInputs="refreshInputs" :modalProps="modalProps" @@newValue="emitModalValue" :inputsKey="modalKey"/>
+					<Modal :refreshInputs="refreshInputs" :modalProps="modalsameOrgAgreements"/>
+					<div class="modal fade modal-preview-template" id="previewTemplate" role="dialog" style="overflow:hidden; pointer-events:none">
+						<div class="modal-dialog modal-lg mt-0" style="pointer-events: auto;" role="document">
+								<div class="modal-header bg-white">
+									<h6 class="modal-title mb-0" id="modal-label">Preview</h6>
+									<div class="close-icon" data-dismiss="modal" aria-label="Close">
+									</div>
+								</div>
+								<div class="doc-preview">
+									<iframe :src="iframeSrc" style="position:absolute; top: 50px; left: 0; height:100%; width:100%; border: 0;" ></iframe>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>`
+			,
+			data() {
+				return {
+					modalKey: 0,
+					apiUrl: apiEndpoints.Agreement.GetAllTablePaginatedAgreements,
+					httpMethod: 'post',
+					tableFields: [
+						{
+							name: 'created',
+							title: 'Date',
+							sortField: 'created',
+							visible: true
+						},
+						{
+							name: 'name',
+							title: 'Name',
+							sortField: 'name',
+							visible: true
+						},
+						{
+							name: 'organizationName',
+							title: 'Organization',
+							sortField: 'organizationName',
+							visible: true
+						},
+						{
+							name: 'leadName',
+							title: 'Lead',
+							sortField: 'leadName',
+							visible: true
+						},
+						{
+							name: 'userName',
+							title: 'Responsible',
+							visible: true,
+							sortField: 'userName'
+						},
+						{
+							name: 'isDeleted',
+							title: `Status`,
+							sortField: 'isDeleted',
+							visible: true
+						}
+					],
+					dataLoad: false,
+					allAgreements: [],
+					contractTemplatesSelect: [],
+					leadsSelect: [],
+					organisationsSelect: [],
+					organisationAddressesSelect: [],
+					organisationContactsSelect: [],
+					usersSelect: [],
+					productsSelect: [],
+					searchString: '',
+					modalValues: {},
+					pageOptionsComponents: [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add agreement',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableModal = false;
+									this.resetModalValues();
+									this.refreshInputs++;
+									this.modalKey++;
+									$(`#${this.modalProps.id}`).modal("show");
+								}
+							}
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'name',
+								sortField: 'name',
+								direction: 'asc'
+							}
+						]
+					},
+					tableActions: {
+						single: {
+							"details": { name: "Details", icon: "details" },
+							"edit": { name: "Edit", icon: "edit" },
+							"generate": { name: "Generate", icon: "file-text" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					addEntityAvailable: false,
+					isOrgSelectDisabled: false,
+					waitAddButton: false,
+					editableModal: false,
+					refreshInputs: 0,
+					pageRequestFilters: [],
+					loadTable: false,
+					showFilters: false,
+					iframeSrc: null
+				};
+			},
+			computed: {
+				activePreviewBtn() {
+					return this.modalValues.contractTemplateId ? true : false;
+				},
+				customQueryparams() {
+					const params = {
+						gSearch: this.searchString,
+						includeDeleted: true
+					};
+					this.pageRequestFilters.forEach((a,i) => {
+						for (pv in a) {
+							params[`pageRequestFilters[${i}][${pv}]`] = a[pv];
+						}
+					});
+					return params;
+				},
+				modalLabel() {
+					return this.editableModal ? 'Edit agreement' : 'Add agreement';
+				},
+				modalProps() {
+					return {
+						id: 'contactModal',
+						label: this.modalLabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'agreement-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									className: 'col-12',
+									value: this.modalValues.name,
+									validator: value => fieldValidationFunc(value, 'varChar128'),
+									validatorInput: value => fieldValidationInputFunc(value, 'varChar128')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-contractTemplateId',
+									label: 'Template Contract',
+									required: true,
+									options: this.contractTemplatesSelect,
+									className: 'col-12',
+									value: this.modalValues.contractTemplateId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-organizationId',
+									label: 'Organization',
+									required: true,
+									options: this.organisationsSelect,
+									size: 10,
+									className: 'col-12',
+									value: this.modalValues.organizationId
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-leadId',
+									label: 'Lead',
+									required: true,
+									size: 10,
+									searchable: true,
+									options: this.leadsSelect,
+									className: 'col-12',
+									value: this.modalValues.leadId,
+									noneSelectedText: this.modalValues.organizationId && this.leadsSelect.length == 0 ? 'Please add at least one lead to this organization' : 'Nothing selected'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-organizationAddressId',
+									label: 'Organization address',
+									required: true,
+									options: this.organisationAddressesSelect,
+									size: 10,
+									searchable: true,
+									className: 'col-12',
+									value: this.modalValues.organizationAddressId,
+									noneSelectedText: this.modalValues.organizationId && this.organisationAddressesSelect.length == 0 ? 'Please add at least one address to this organization' : 'Nothing selected'
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-contactId',
+									label: 'Contact',
+									required: true,
+									size: 10,
+									searchable: true,
+									options: this.organisationContactsSelect,
+									className: 'col-12 col-md-6',
+									value: this.modalValues.contactId,
+									noneSelectedText: this.modalValues.organizationId && this.organisationContactsSelect.length == 0 ? 'Please add at least one contact to this organization' : 'Nothing selected'
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: 'agreement-commission',
+									label: 'Commission',
+									type: 'text',
+									required: true,
+									className: 'col-12 col-md-6',
+									inputSuffix: '%',
+									value: this.modalValues.commission,
+									validator: value => fieldValidationFunc(value, 'percentage'),
+									validatorInput: value => fieldValidationInputFunc(value, 'percentage')
+								}
+							},
+							{
+								name: 'Select',
+								props: {
+									id: 'agreement-userId',
+									label: 'Responsible',
+									required: true,
+									size: 10,
+									searchable: true,
+									options: this.usersSelect,
+									className: 'col-12',
+									value: this.modalValues.userId
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'agreement-description',
+									label: 'Description',
+									required: true,
+									value: this.modalValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Preview',
+									btnType: 'outline-primary',
+									disabled: !this.activePreviewBtn,
+									waiting: this.waitAddButton,
+									onClick: () => {
+										this.html2pdfPreview();
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitAddButton,
+									onClick: () => {
+										$(`#${this.modalProps.id}`).modal("hide");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									btnDOMType: 'submit'
+								}
+							}
+						],
+						onSubmit: () => {
+							if (!this.editableModal) {
+								this.checkForDuplicateAndAdd().then(id => {
+									this.modalValues.id = id;
+									$(`#${this.modalProps.id}`).modal("hide");
+									$(`#${this.modalsameOrgAgreements.id}`).modal("show");
+								}).catch(() => {
+									this.addNewEntity().then(() => {
+										$(`#${this.modalProps.id}`).modal("hide");
+									});
+								});
+							} else {
+								this.updateEntity().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				},
+				modalsameOrgAgreements() {
+					return {
+						id: 'orgAgreementsModal',
+						label: 'Attention!',
+						formInputs: [
+							{
+								name: 'TextBlock',
+								props: {
+									value: `Contract with same organization, lead and name already exists. Do you want to overwrite it?`
+								}
+							}
+						],
+						formSubmits: [
+							{
+								name: 'Button',
+								props: {
+									label: 'Yes',
+									btnType: 'warning',
+									waiting: this.waitAddButton,
+									onClick: () => {
+										this.modalValues.id = this.sameOrgAgreementId;
+										this.updateEntity().then(() => {
+											$(`#${this.modalsameOrgAgreements.id}`).modal("hide");
+										});
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Cancel',
+									btnType: 'outline-secondary',
+									waiting: this.waitAddButton,
+									onClick: () => {
+										this.modalKey++;
+										$(`#${this.modalsameOrgAgreements.id}`).modal("hide");
+										$(`#${this.modalProps.id}`).modal("show");
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Save as new',
+									btnType: 'success',
+									waiting: this.waitAddButton,
+									onClick: () => {
+										this.addNewEntity().then(() => {
+											$(`#${this.modalsameOrgAgreements.id}`).modal("hide");
+										});
+									}
+								}
+							},
+						]
+					}
+				},
+				usersListFilter() {
+					let newArray = [];
+					this.usersSelect.forEach(e => {
+						let newElem = Object.assign({}, e);
+						newElem.active = false;
+						newArray.push(newElem);
+					});
+					return newArray;
+				},
+				tableFilters() {
+					return [
+						{
+							id: 'UserId',
+							label: 'Responsible',
+							values: this.usersListFilter
+						},
+						{
+							id: 'IsDeleted',
+							label: 'Status',
+							values: [
+								{
+									active: false,
+									label: 'Active',
+									value: false
+								},
+								{
+									active: false,
+									label: 'Inactive',
+									value: true
+								}
+							]
+						}
+					]
+				},
+			},
+			created() {
+				this.resetModalValues();
+				const promises = [
+					customAjaxRequest(apiEndpoints.Contract.GetAllContractTemplate),
+					customAjaxRequest(apiEndpoints.Organization.GetAllOrganization),
+					customAjaxRequest(apiEndpoints.Users.GetUsers),
+					customAjaxRequest(apiEndpoints.Product.GetAllProducts)
+				];
+				Promise.all(promises).then(result => {
+					this.contractTemplatesSelect = this.convertToSelectList(result[0]);
+					this.organisationsSelect = this.convertToSelectList(result[1]);
+					this.usersSelect = this.convertUsersToSelectList(result[2]);
+					this.productsSelect = this.convertToSelectList(result[3]);
+					this.dataLoad = true;
+					this.loadTable = true;
+					this.showFilters = true;
+				});
+				this.getAllAgreements();
+			},
+			mounted() {
+				$('#previewTemplate').bind('hidden.bs.modal', () => {
+					$(`#${this.modalProps.id}`).modal('show');
+				});
+			},
+			methods: {
+				async checkForDuplicateAndAdd() {
+					this.waitAddButton = true;
+					const sameAgreement = this.allAgreements.find(
+						a => {
+							if(
+								a.organizationId == this.modalValues.organizationId
+								&& a.name == this.modalValues.name
+								&& a.leadId == this.modalValues.leadId
+							){
+								return true;
+							}
+						}
+					);
+					return new Promise((resolve, reject) => {
+						this.waitAddButton = false;
+						if (sameAgreement) {
+							this.sameOrgAgreementId = sameAgreement.id;
+							resolve(true);
+						} else {
+							reject(false);
+						}
+					});
+				},
+				async addNewEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Agreement.AddAgreement, 'PUT', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateEntity() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Agreement.UpdateAgreement, 'POST', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deactivateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Agreement.DisableAgreement, 'POST', { agreementId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Agreement.ActivateAgreement, 'POST', { agreementId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deleteEntities(array) {
+					array.forEach((entityId, i, a) => {
+						customAjaxRequest(apiEndpoints.Agreement.DeleteAgreement, 'DELETE', { agreementId: entityId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async loadEntity(entityId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Agreement.GetAgreementById, 'GET', { agreementId: entityId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				getfilters() {
+					return this.pageRequestFilters;
+				},
+				getAllAgreements() {
+					customAjaxRequest(apiEndpoints.Agreement.GetAllAgreements).then(agreements => {
+						this.allAgreements = agreements;
+						this.addEntityAvailable = true;
+					});
+				},
+				loadOrganizationAdditionalData(organizationId) {
+					const promises = [
+						customAjaxRequest(apiEndpoints.Leads.GetLeadsByOrganizationId, 'GET', { organizationId }),
+						customAjaxRequest(apiEndpoints.Contact.GetContactByOrganizationId, 'GET', { organizationId }),
+						customAjaxRequest(apiEndpoints.OrganizationAddress.GetAddressesByOrganizationId, 'GET', { organizationId })
+					];
+					Promise.all(promises).then(result => {
+						this.leadsSelect = this.convertToSelectList(result[0]);
+						this.organisationContactsSelect = this.convertContactsToSelectList(result[1]);
+						this.organisationAddressesSelect = this.convertAdddressToSelectList(result[2]);
+						this.modalKey++;
+					});
+				},
+				editEntity(entityId) {
+					this.loadEntity(entityId).then(result => {
+						this.editableModal = true;
+						this.modalValues = {
+							id: entityId,
+							name: result.name,
+							leadId: result.leadId,
+							organizationId: result.organizationId,
+							contactId: result.contactId,
+							organizationAddressId: result.organizationAddressId,
+							userId: result.userId,
+							contractTemplateId: result.contractTemplateId,
+							commission: result.commission,
+							productId: result.productId,
+							description: result.description
+						}
+						this.updateEntityId = entityId;
+						if (result.organizationId) {
+							this.loadOrganizationAdditionalData(result.organizationId);
+						}
+						this.modalKey++;
+						this.refreshInputs++;
+						$(`#${this.modalProps.id}`).modal("show");
+					});
+				},
+				generateContract(agreementId) {
+					window.open(`${window.location.origin}${apiEndpoints.Agreement.GenerateFileContractForAgreement}?agreementId=${agreementId}`, '_blank');
+				},
+				resetModalValues() {
+					this.modalValues = {
+						name: null,
+						leadId: null,
+						organizationId: null,
+						contactId: null,
+						organizationAddressId: null,
+						userId: null,
+						contractTemplateId: null,
+						commission: null,
+						productId: null
+					}
+				},
+				emitModalValue(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.modalValues[val.id.replace('agreement-', '')] = newVal;
+					if (val.id == 'agreement-organizationId') {
+						this.loadOrganizationAdditionalData(val.value);
+						this.modalKey++;
+					}
+				},
+				convertToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: e.name,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertContactsToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: `${e.firstName} ${e.lastName}`,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				convertUsersToSelectList(array) {
+					return array.map(e => {
+						return {
+							label: e.userFirstName ? `${e.userFirstName} ${e.userLastName}` : e.userName,
+							value: e.id
+						}
+					});
+				},
+				convertAdddressToSelectList(array) {
+					return array.map(e => {
+						const newObj = {
+							label: `r.${e.city.region.name}, ${e.city.name} ${e.street ? ', ' + e.street : ''}`,
+							value: e.id
+						}
+						return newObj;
+					});
+				},
+				getUserName(userId) {
+					const user = this.findObjectByPropValue(this.usersSelect, userId, 'value');
+					return user.label;
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateEntities(action.value);
+							break;
+						} case 'activate': {
+							this.activateEntities(action.value);
+							break;
+						} case 'edit': {
+							this.editEntity(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteEntities(action.value);
+							break;
+						} case 'details': {
+							window.location.href = '/agreement/details?id=' + action.value[0];
+							break;
+						} case 'generate': {
+							this.generateContract(action.value[0]);
+							break;
+						}
+					}
+				},
+				initials(name, surname) {
+					return name && surname ? `${name.charAt(0)} ${surname.charAt(0)}` : 'UP';
+				},
+				findObjectByPropValue: (array, value, prop) => {
+					return array.find(x => x[prop] === value);
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				},
+				setBodyProgressCursor() {
+					$("body").css("cursor", "progress");
+				},
+				unsetBodyProgressCursor() {
+					$("body").css("cursor", "default");
+				},
+				filterResult(val) {
+					this.pageRequestFilters = [];
+					val.forEach(f => {
+						f.values.forEach(v => {
+							if (v.active) {
+								this.pageRequestFilters.push({
+									Propriety: f.id,
+									Value: v.value
+								});
+							}
+						});
+					});
+					this.tableKey++;
+				},
+				tableLoad() {
+					this.getAllAgreements();
+				},
+				html2pdfPreview() {
+					this.waitAddButton = true;
+					let sectionsString = '';
+					customAjaxRequest(apiEndpoints.Contract.GetContractTemplateSections, 'GET', { contractTemplateId: this.modalValues.contractTemplateId }).then(sections => {
+						sections.forEach(s => {
+							sectionsString += s.templateValue;
+						});
+						var opt = {
+							  margin:       [57, 85, 57, 42],
+							  filename:     'Preview.pdf',
+							  image:        { type: 'jpeg', quality: 0.98 },
+							  html2canvas:  { scale: 2 },
+							  jsPDF:        { unit: 'pt' }
+						};
+						let worker = html2pdf();
+						worker.from(sectionsString, 'string').set(opt).outputPdf('bloburl', { 'filename': 'Preview.pdf', putOnlyUsedFonts: true }).then(r => {
+							this.iframeSrc = r;
+							$(`#${this.modalProps.id}`).modal('hide');
+							$('#previewTemplate').modal('show');
+							this.waitAddButton = false;
+						});
+					});
+				}
+			}
+		});
+
+	</script>
+}

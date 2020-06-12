@@ -1,0 +1,358 @@
+@{
+	ViewData["Title"] = "Contract templates";
+}
+
+<ContractTemplates />
+
+@section Scripts
+{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script>
+		const datePickerFormat = 'yyyy/mm/dd';
+		Vue.component('ContractTemplates', {
+			template: `
+				<div>
+					<PageOptionsBar :pageOptionsComponents="pageOptionsComponents" @@searchInput="searchTable" :searcheable="true"/>
+					<Table 
+						:fields="tableFields"
+						:apiUrl="apiUrl"
+						:httpMethod="httpMethod"
+						@@triggeredMenuAction="action"
+						@@onLoad="tableDataLoaded"
+						tableId="template-table"
+						:sortOrder="tableConfig.sortCol"
+						:customQueryparams="customQueryparams"
+						:hasCustomQUeryparams="true"
+						:initialPageSize="100"
+						:reload="tableKey"
+						dataPath="result"
+						:actionsSingle="tableActions.single"
+						:actionsSingleDisabled="tableActions.singleDisabled"
+						:actionsMultiple="tableActions.multiple"
+						:actionsMultipleDisabled="tableActions.multipleDisabled"
+						:haveContextMenu="true"
+					>
+						<slot slot="name" slot-scope="props">
+							<a :href="'/contracts/contractTemplateSections?id=' + props.rowData.id" @@click.stop>
+								{{ props.rowData.name }}
+							</a>
+						</slot>
+					</Table>
+					<Modal :modalProps="modalProps" @@newValue="emitValueModal" :refreshInputs="refreshInputs" :inputsKey="modalKey"/>
+				</div>
+			`,
+			data() {
+				return {
+					modalKey: 0,
+					apiUrl: apiEndpoints.Contract.GetAllPaginatedContractTemplate,
+					httpMethod: 'get',
+					tableFields: [
+						{
+							name: 'name',
+							title: 'Name',
+							visible: true,
+							sortField: 'name'
+						},
+						{
+							name: 'created',
+							title: 'Date',
+							visible: true,
+							sortField: 'created'
+						},
+						{
+							name: 'description',
+							title: 'Description',
+							visible: true
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 20,
+						rowCount: 0,
+						sortCol: [
+							{
+								field: 'name',
+								sortField: 'name',
+								direction: 'desc'
+							}
+						]
+					},
+					tableActions: {
+						single: {
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "eye-off" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					refreshInputs: 0,
+					editableModal: false,
+					waitAddButton: false,
+					modalValues: {},
+					tableData: [],
+					searchString: ''
+				}
+			},
+			computed: {
+				customQueryparams() {
+					return {
+						includeDeleted: true,
+						gSearch: this.searchString
+					}
+				},
+				pageOptionsComponents() {
+					return [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add template',
+								className: 'ml-auto',
+								btnType: 'success',
+								onClick: () => {
+									this.editableModal = false;
+									this.waitAddButton = false;
+									this.resetModalValues();
+									this.modalKey++;
+									this.refreshInputs++;
+									$(`#${this.modalProps.id}`).modal("show");
+								}
+							}
+						}
+					]
+				},
+				modalSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								}
+							}
+						}];
+					if (!this.editableModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalLabel() {
+					return this.editableModal ? 'Edit template' : 'Add template';
+				},
+				modalProps() {
+					return {
+						id: 'templateModal',
+						modalSize: '',
+						label: this.modalLabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: 'contractTemplate-name',
+									type: 'text',
+									label: 'Name',
+									required: true,
+									value: this.modalValues.name,
+									className: 'col-12',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Datepicker',
+								props: {
+									id: 'contractTemplate-startDate',
+									label: 'Date',
+									disabled: true,
+									format: datePickerFormat,
+									value: this.modalValues.startDate,
+									className: 'col-12'
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: 'contractTemplate-description',
+									label: 'Description',
+									required: true,
+									value: this.modalValues.description,
+									className: 'col-12'
+								}
+							}
+						],
+						formSubmits: this.modalSubmits,
+						onSubmit: () => {
+							if (!this.editableModal) {
+								this.addNewTemplate().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							} else {
+								this.updateTemplate().then(() => {
+									$(`#${this.modalProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				}
+			},
+			created() {
+				this.resetModalValues();
+				this.refreshInputs++;
+			},
+			methods: {
+				async addNewTemplate() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contract.AddContractTemplate, 'PUT', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async deleteTemplates(array) {
+					array.forEach((contractId, i, a) => {
+						customAjaxRequest(apiEndpoints.Contract.DeleteContractTemplate, 'DELETE', { contractId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async deactivateTemplates(array) {
+					array.forEach((contractId, i, a) => {
+						customAjaxRequest(apiEndpoints.Contract.DisableContractTemplate, 'POST', { contractId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateTemplates(array) {
+					array.forEach((contractId, i, a) => {
+						customAjaxRequest(apiEndpoints.Contract.ActivateContractTemplate, 'POST', { contractId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async updateTemplate() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.Contract.UpdateContractTemplate, 'PUT', this.modalValues).then(() => {
+							this.tableKey++;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+						}).finally(() => {
+							this.waitAddButton = false;
+						});
+					});
+				},
+				tableDataLoaded(data) {
+					this.tableData = data;
+				},
+				editTemplate(id) {
+					this.editableModal = true;
+					this.waitAddButton = false;
+					this.modalValues = Object.assign({}, this.findObjectByPropValue(this.tableData, id, 'id'));
+					this.modalValues.startDate = this.modalValues.created;
+					this.modalKey++;
+					this.refreshInputs++;
+					$(`#${this.modalProps.id}`).modal("show");
+				},
+				resetModalValues() {
+					this.modalValues = {
+						name: '',
+						description: '',
+						startDate: moment().format('YYYY/MM/DD').toString()
+					}
+				},
+				emitValueModal(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.modalValues[val.id.replace('contractTemplate-', '')] = newVal;
+				},
+				action(action) {
+					switch (action.key) {
+						case 'deactivate': {
+							this.deactivateTemplates(action.value);
+							break;
+						} case 'activate': {
+							this.activateTemplates(action.value);
+							break;
+						} case 'edit': {
+							this.editTemplate(action.value[0]);
+							break;
+						} case 'delete': {
+							this.deleteTemplates(action.value);
+							break;
+						}
+					}
+				},
+				findObjectByPropValue: (array, value, prop) => {
+					return array.find(x => x[prop] === value);
+				},
+				searchTable(val) {
+					if (val.length > 2) {
+						this.searchString = val;
+						this.tableKey++;
+					} else if (val === '') {
+						this.searchString = '';
+						this.tableKey++;
+					}
+				}
+			}
+		});
+	</script>
+}

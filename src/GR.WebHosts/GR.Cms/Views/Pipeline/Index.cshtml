@@ -1,0 +1,717 @@
+@using GR.Crm.PipeLines.Abstractions
+@inject ICrmPipeLineService Service
+
+@{
+	ViewData["Title"] = "Pipeline configuration";
+	var pipeLinesRequest = await Service.GetAllPipeLinesAsync();
+}
+
+<Pipelines />
+
+@section Scripts{
+	<script src="~/themes/gear/js/components/pageOptionsbar.js"></script>
+	<script src="~/themes/gear/js/components/table/table.js"></script>
+	<script src="~/themes/gear/js/components/modal.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/textarea.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/input.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/select.js"></script>
+	<script src="~/themes/gear/js/components/form-controls/datepicker.js"></script>
+	<script>
+		Vue.component('Pipelines', {
+			template: `
+				<div>
+					<PageOptionsBar :pageOptionsComponents="pageOptionsComponents"/>
+					<div class="page-content pipelines position-relative">
+						<div v-show="!dataLoaded" class="section-loader"><Loader/></div>
+						<div :key="pipelineRefreshCount">
+							<div v-for="pipeline in pipelines">
+								<hr class="no-gutters">
+								<div key="pipeline.id" class="parent-content pipeline-accordion" :id="pipeline.id" :class="pipeline.isDeleted ? 'disabled' : ''">
+									<div class="row row-m-20 bg-white border rounded collapse-container hover-invisible-toggle position-relative cursor-pointer pb-lg-0 pb-2" :data-toggle="pipeline.isDeleted ? '' : 'collapse'" :href="'#pipeline-' + pipeline.id" data-type="ActivityList">
+										<div class="d-lg-flex d-block w-100 px-20 align-items-center">
+											<div class="d-flex">
+												<a class="border collapse-switcher d-inline-block">
+													<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right collapse-switcher-icon"><polyline points="9 18 15 12 9 6"></polyline></svg>
+												</a>
+												<span class="collapse-title" >
+													{{ pipeline.name }}
+												</span>
+												<span class="collapse-count">{{ pipeline.stages.length }}</span>
+												<div class="dropdown collapse-dropdown">
+													<div class="more-vertical hover-invisible hover-lg" data-toggle="dropdown"></div>
+													<div class="dropdown-menu dropdown-menu-right">
+														<li v-if="!pipeline.isDeleted"
+															class="position-relative pl-30px dropdown-item context-menu-icon context-menu-icon-edit"
+															@@click.stop.prevent="editPipeline(pipeline.id)"
+															data-toggle="dropdown"
+														>
+															<span>Edit</span>
+														</li>
+														<li v-if="pipeline.isDeleted"
+															class="position-relative pl-30px dropdown-item context-menu-icon context-menu-icon-eye"
+															@@click.stop.prevent="activatePipeline(pipeline.id)"
+														>
+															<span>Activate</span>
+														</li>
+														<li v-else
+															class="position-relative pl-30px dropdown-item context-menu-icon context-menu-icon-x-square"
+															@@click.stop.prevent="disablePipeline(pipeline.id)"
+														>
+															<span>Deactivate</span>
+														</li>
+														<li v-if="pipeline.isDeleted"
+															class="position-relative pl-30px dropdown-item context-menu-icon context-menu-icon-delete"
+															@@click.stop.prevent="deletePipeline(pipeline.id)"
+															data-toggle="dropdown"
+														>
+															<span>Delete permanently</span>
+														</li>
+													</div>
+												</div>
+											</div>
+											<div class="d-lg-block d-inline-block ml-2" v-if="!pipeline.isDeleted">
+												<a class="d-flex align-items-center btn btn-success btn-sm hover-invisible" href="#" @@click.stop="openModalStage(pipeline.id)">Add stage</a>
+											</div>
+										</div>
+									</div>
+									<PipelineStages :ref="'pipeline-' + pipeline.id" :pipeLineId="pipeline.id" @@updatePipeline="updatePipelineStages" />
+								</div>
+							</div>
+						</div>
+					</div>
+					<Modal :modalProps="modalPipelineProps" @@newValue="emitValuePipeline" :refreshInputs="refreshInputs" :inputsKey="modalKey"/>
+				</div>
+			`,
+			data() {
+				return {
+					modalKey: 0,
+					pipelines: [],
+					editablePipelineModal: false,
+					refreshInputs: 0,
+					pipelineValues: {
+						name: '',
+						description: ''
+					},
+					waitAddButton: false,
+					dataLoaded: false,
+					pipelineRefreshCount: 0
+				}
+			},
+			created() {
+				this.getPipelines();
+			},
+			computed: {
+				pageOptionsComponents() {
+					return [
+						{
+							name: 'Button',
+							props: {
+								label: 'Add pipeline',
+								btnType: 'success',
+								className: 'ml-auto',
+								onClick: () => {
+									this.editablePipelineModal = false;
+									this.waitAddButton = false;
+									this.resetPipelineModalValues();
+									this.modalKey++;
+									$(`#${this.modalPipelineProps.id}`).modal("show");
+								}
+							}
+						}
+					]
+				},
+				modalPipelineSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									$(`#${this.modalPipelineProps.id}`).modal("hide");
+								}
+							}
+						}];
+					if (!this.editablePipelineModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalPipelineLabel() {
+					return this.editablePipelineModal ? 'Edit pipeline' : 'Add pipeline';
+				},
+				modalPipelineProps() {
+					return {
+						id: `pipeline-modal`,
+						label: this.modalPipelineLabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: `pipeline-name`,
+									type: 'text',
+									label: 'Name',
+									required: true,
+									value: this.pipelineValues.name,
+									className: 'col-12',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Textarea',
+								props: {
+									id: `pipeline-desctiprion`,
+									label: 'Decription',
+									value: this.pipelineValues.description,
+									className: 'col-12',
+								}
+							},
+						],
+						formSubmits: this.modalPipelineSubmits,
+						onSubmit: () => {
+							if (!this.editablePipelineModal) {
+								this.addPipeline().then(pipeLineId => {
+									$(`#${this.modalPipelineProps.id}`).modal("hide");
+									const refName = 'pipeline-' + pipeLineId;
+									const modalId = this.$refs[refName][0].modalStageProps.id;
+									this.modalKey++;
+									$(`#${modalId}`).modal("show");
+
+								});
+							} else {
+								this.updatePipeline().then(() => {
+									$(`#${this.modalPipelineProps.id}`).modal("hide");
+								});
+							}
+						}
+					}
+				}
+			},
+			methods: {
+				async getPipelines() {
+					this.dataLoaded = false;
+					this.pipelines = [];
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PipeLines.GetAll, 'GET', {includeDeleted: true}).then(result => {
+							this.pipelines = this.sortPipelines(result);
+							this.pipelineRefreshCount++;
+							this.dataLoaded = true;
+							resolve(true);
+						}).catch(() => {
+							reject(false);
+							this.dataLoaded = true;
+						});
+					});
+				},
+				async addPipeline() {
+					this.dataLoaded = false;
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PipeLines.AddPipeLine, 'PUT', this.pipelineValues).then(pipeLineId => {
+							this.getPipelines().then(() => {
+								this.dataLoaded = true;
+								this.waitAddButton = false;
+								resolve(pipeLineId);
+							});
+						}).catch(e => {
+							this.dataLoaded = true;
+							this.waitAddButton = false;
+							toast.notifyErrorList(e);
+							reject(false);
+						});
+					});
+				},
+				async disablePipeline(pipeLineId) {
+					this.dataLoaded = false;
+					$(`#${pipeLineId} .dropdown`).dropdown('toggle');
+					customAjaxRequest(apiEndpoints.PipeLines.DisablePipeLine, 'DELETE', { pipeLineId }).then(() => {
+						this.getPipelines();
+						this.dataLoaded = true;
+					}).catch(e => {
+						toast.notifyErrorList(e);
+						this.dataLoaded = true;
+					});
+				},
+				async deletePipeline(pipeLineId) {
+					this.dataLoaded = false;
+					$(`#${pipeLineId} .dropdown`).dropdown('toggle');
+					customAjaxRequest(apiEndpoints.PipeLines.RemovePipeLinePermanently, 'DELETE', { pipeLineId }).then(() => {
+						this.getPipelines();
+						this.dataLoaded = true;
+					}).catch(e => {
+						this.dataLoaded = true;
+						toast.notifyErrorList(e);
+					});
+				},
+				async activatePipeline(pipeLineId) {
+					this.dataLoaded = false;
+					$(`#${pipeLineId} .dropdown`).dropdown('toggle');
+					customAjaxRequest(apiEndpoints.PipeLines.ActivatePipeLine, 'DELETE', { pipeLineId }).then(() => {
+						this.dataLoaded = true;
+						this.getPipelines();
+					}).catch(e => {
+						this.dataLoaded = true;
+						toast.notifyErrorList(e);
+					});
+				},
+				async updatePipeline() {
+					this.dataLoaded = false;
+					return new Promise((resolve, reject) => {
+						this.waitAddButton = true;
+						customAjaxRequest(apiEndpoints.PipeLines.UpdatePipeLine, 'POST', this.pipelineValues).then(() => {
+							this.getPipelines();
+							this.waitAddButton = false;
+							this.dataLoaded = true;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							this.dataLoaded = true;
+							this.waitAddButton = false;
+							reject(false);
+						});
+					});
+				},
+				loadPipeline(pipeLineId) {
+					return this.findObjectByPropValue(this.pipelines, pipeLineId, 'id');
+				},
+				editPipeline(pipeLineId) {
+					$(`#${pipeLineId} .dropdown`).dropdown('toggle');
+					this.pipelineValues = this.loadPipeline(pipeLineId);
+					this.editablePipelineModal = true;
+					this.modalKey++;
+					this.refreshInputs++;
+					$(`#${this.modalPipelineProps.id}`).modal("show");
+				},
+				openModalStage(pipelineId) {
+					const refName = 'pipeline-' + pipelineId;
+					const obj = this.$refs[refName][0];
+					obj.openModalStage();
+				},
+				findObjectByPropValue(array, value, prop) {
+					return array.find(x => x[prop] === value);
+				},
+				setStageCount(val) {
+					this.stageCount = val;
+				},
+				resetPipelineModalValues() {
+					this.pipelineValues = {
+						name: '',
+						description: ''
+					}
+				},
+				emitValuePipeline(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.pipelineValues[val.id.replace(`pipeline-`, '')] = newVal;
+				},
+				sortPipelines(array) {
+					if (array) {
+						return array.sort(function (x, y) {
+							 (x.isDeleted === y.isDeleted) ? 0 : x.isDeleted ? 1 : -1;
+						});
+					} else {
+						return [];
+					}
+				},
+				updatePipelineStages(action, pipeLineId, stageId) {
+					const pipeline = this.loadPipeline(pipeLineId);
+					if (action == 'add') {
+						customAjaxRequest(apiEndpoints.PipeLines.FindStageById, 'GET', { stageId }).then(result => {
+							pipeline.stages.push(result);
+						});
+					} else if (action == 'delete') {
+						pipeline.stages = pipeline.stages.filter(ps => ps.id != stageId);
+					}
+				}
+			}
+		});
+		Vue.component('PipelineStages', {
+			template: `
+			<div>
+				<div class="collapse" :id="'pipeline-' + pipeLineId">
+					<div class="table-wrapper">
+						<Table
+							:fields="tableFields"
+							:apiUrl="apiUrl"
+							:httpMethod="httpMethod"
+							@@triggeredMenuAction="action"
+							@@dragResult="dragResult"
+							@@onLoad="tableLoad"
+							:tableId="'pipeline-table-' + pipeLineId"
+							:initialPageSize="20"
+							:reload="tableKey"
+							:customQueryparams="{pipeLineId, includeDeleted: true}"
+							:hasCustomQUeryparams="true"
+							entityLink="#"
+							dataPath="result"
+							:withoutHideColumn="true"
+							:draggableRows="true"
+							:draggableOptions="draggableOptions"
+							:actionsSingle="tableActions.single"
+							:actionsSingleDisabled="tableActions.singleDisabled"
+							:actionsMultiple="tableActions.multiple"
+							:actionsMultipleDisabled="tableActions.multipleDisabled"
+							:haveContextMenu="true"
+							ref="table"
+						>
+							<slot slot="name" slot-scope="props">
+								<span :class="{'row-deleted' : props.rowData.isDeleted}" ></span>{{ props.rowData.name }}
+							</slot>
+						</Table>
+					</div>
+				</div>
+				<Modal :modalProps="modalStageProps" @@newValue="emitValueStage" :refreshInputs="refreshInputs" :inputsKey="modalKey"/>
+			</div>
+			`,
+			data() {
+				return {
+					modalKey: 0,
+					stages: [],
+					apiUrl: apiEndpoints.PipeLines.GetPipeLineStages,
+					httpMethod: 'get',
+					tableFields: [
+						{
+							name: 'order',
+							title: '#',
+							visible: true,
+							dataClass: 'order-cell',
+							formatter: value => {
+								return value + 1;
+							}
+						},
+						{
+							name: 'name',
+							title: 'Stages',
+							visible: true,
+							dataClass: 'name-cell'
+						},
+						{
+							name: 'term',
+							title: 'Term(days)',
+							visible: true
+						}
+					],
+					tableConfig: {
+						currentPage: 0,
+						pageSize: 10,
+						rowCount: 0
+					},
+					tableActions: {
+						single: {
+							"edit": { name: "Edit", icon: "edit" },
+							"deactivate": { name: "Deactivate", icon: "x-square" }
+						},
+						singleDisabled: {
+							"activate": { name: "Activate", icon: "eye" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						},
+						multiple: {
+							"deactivate": { name: "Deactivate", icon: "x-square" }
+						},
+						multipleDisabled: {
+							"activate": { name: "Activate", icon: "check-square" },
+							"delete": { name: "Delete permanently", icon: "delete" }
+						}
+					},
+					tableKey: 0,
+					draggableOptions: {
+						handle: '.drag-icon',
+						axis: "y",
+						items: 'tr',
+						start: (e, ui) => {
+							console.log(e, ui);
+						}
+					},
+					editableStageModal: false,
+					continueAddStage: false,
+					waitAddButton: false,
+					refreshInputs: 0,
+					stageValues: {
+						pipeLineId: this.pipeLineId,
+						name: '',
+						term: null
+					}
+				}
+			},
+			props: {
+				pipeLineId: String
+			},
+			computed: {
+				modalStageSubmits() {
+					const resultArray = [
+						{
+							name: 'Button',
+							props: {
+								label: 'Cancel',
+								btnType: 'outline-secondary',
+								onClick: () => {
+									if (this.stages.length > 0) {
+										$(`#${this.modalStageProps.id}`).modal("hide");
+									} else {
+										this.openWarningWindow();
+									}
+								}
+							}
+						}];
+					if (!this.editableStageModal) {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Add',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.continueAddStage = false;
+									}
+								}
+							},
+							{
+								name: 'Button',
+								props: {
+									label: 'Add & new',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.continueAddStage = true;
+									}
+								}
+							}
+						);
+					} else {
+						resultArray.push(
+							{
+								name: 'Button',
+								props: {
+									label: 'Save',
+									btnType: 'success',
+									btnDOMType: 'submit',
+									waiting: this.waitAddButton,
+									onMouseDown: () => {
+										this.continueAddStage = false;
+									}
+								}
+							}
+						);
+					}
+					return resultArray;
+				},
+				modalStageLabel() {
+					return this.editableStageModal ? 'Edit stage' : 'Add stage';
+				},
+				modalStageProps() {
+					return {
+						id: `${this.pipeLineId}-modal-stage`,
+						label: this.modalStageLabel,
+						formInputs: [
+							{
+								name: 'Input',
+								props: {
+									id: `${this.pipeLineId}-stage-name`,
+									type: 'text',
+									label: 'Name',
+									required: true,
+									value: this.stageValues.name,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'name'),
+									validatorInput: value => fieldValidationInputFunc(value, 'name')
+								}
+							},
+							{
+								name: 'Input',
+								props: {
+									id: `${this.pipeLineId}-stage-term`,
+									type: 'text',
+									label: 'Term(days)',
+									required: true,
+									value: this.stageValues.term,
+									className: 'col-12 col-md-6',
+									validator: value => fieldValidationFunc(value, 'intNum'),
+									validatorInput: value => fieldValidationInputFunc(value, 'intNum')
+								}
+							},
+						],
+						formSubmits: this.modalStageSubmits,
+						onSubmit: () => {
+							if (!this.editableStageModal) {
+								this.addStage().then(() => {
+									if (this.continueAddStage) {
+										this.resetStageValues();
+									} else {
+										$(`#${this.modalStageProps.id}`).modal("hide");
+										$('.modal-backdrop').remove();
+									}
+								});
+							} else {
+								this.updateStage().then(() => {
+									$(`#${this.modalStageProps.id}`).modal("hide");
+									$('.modal-backdrop').remove();
+								});
+							}
+						},
+						onHide: e => {
+							if (!this.stages.length > 0) {
+								this.openWarningWindow();
+								e.preventDefault();
+								e.stopImmediatePropagation();
+								return false;
+							} else {
+								setTimeout(function(){ $('.modal-backdrop').remove(); }, 1000);
+							}
+						}
+					}
+				}
+			},
+			methods: {
+				async addStage() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PipeLines.AddStageToPipeLine, 'PUT', this.stageValues).then(result => {
+							this.tableKey++;
+							this.$emit('updatePipeline', 'add', this.pipeLineId, result);
+							resolve(true);
+							this.waitAddButton = false;
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(false);
+							this.waitAddButton = false;
+						});
+					});
+				},
+				async updateStage() {
+					this.waitAddButton = true;
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PipeLines.UpdateStage, 'POST', this.stageValues).then(() => {
+							this.tableKey++;
+							this.waitAddButton = false;
+							resolve(true);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							this.waitAddButton = false;
+							reject(false);
+						});
+					});
+				},
+				async loadStage(stageId) {
+					return new Promise((resolve, reject) => {
+						customAjaxRequest(apiEndpoints.PipeLines.FindStageById, 'GET', { stageId }).then(result => {
+							resolve(result);
+						}).catch(e => {
+							toast.notifyErrorList(e);
+							reject(e);
+						});
+					});
+				},
+				async disableStages(stages, atLeastOneActive) {
+					if (!atLeastOneActive) {
+						this.openWarningWindow();
+					} else {
+						stages.forEach((stageId, i, a) => {
+							customAjaxRequest(apiEndpoints.PipeLines.DisableStage, 'DELETE', { stageId }).then(() => {
+								if (i === a.length - 1) {
+									this.tableKey++;
+								}
+							}).catch(e => {
+								toast.notifyErrorList(e);
+							});
+						});
+					}
+				},
+				async deleteStages(stages) {
+					stages.forEach((stageId, i, a) => {
+						customAjaxRequest(apiEndpoints.PipeLines.RemoveStagePermanently, 'DELETE', { stageId }).then(() => {
+							this.$emit('updatePipeline', 'delete', this.pipeLineId, stageId);
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				async activateStages(stages) {
+					stages.forEach((stageId, i, a) => {
+						customAjaxRequest(apiEndpoints.PipeLines.ActivateStage, 'DELETE', { stageId }).then(() => {
+							if (i === a.length - 1) {
+								this.tableKey++;
+							}
+						}).catch(e => {
+							toast.notifyErrorList(e);
+						});
+					});
+				},
+				editStage(stageId) {
+					this.loadStage(stageId).then(result => {
+						this.editableStageModal = true;
+						this.resetStageValues();
+						this.stageValues = result;
+						this.modalKey++;
+						this.refreshInputs++;
+						$(`#${this.modalStageProps.id}`).modal("show");
+					});
+				},
+				action(action) {
+					if (action.key == 'deactivate') {
+						this.disableStages(action.value, action.atLeastOneActive);
+					} else if (action.key == 'activate') {
+						this.activateStages(action.value);
+					} else if (action.key == 'edit') {
+						this.editStage(action.value[0]);
+					}  else if (action.key == 'delete') {
+						this.deleteStages(action.value);
+					} 
+				},
+				resetStageValues() {
+					this.stageValues = {
+						pipeLineId: this.pipeLineId,
+						name: '',
+						term: null
+					}
+					this.refreshInputs++;
+				},
+				dragResult(model) {
+					customAjaxRequest(apiEndpoints.PipeLines.OrderStages, 'POST', { model }).then(() => { this.tableKey++ });
+				},
+				openModalStage() {
+					this.resetStageValues();
+					this.editableStageModal = false;
+					$(`#${this.modalStageProps.id}`).modal('show');
+				},
+				emitValueStage(val) {
+					const newVal = val.value === 'true' ? true : val.value === 'false' ? false : val.value;
+					this.stageValues[val.id.replace(`${this.pipeLineId}-stage-`, '')] = newVal;
+				},
+				openWarningWindow() {
+					alert('Pipeline should have at least one active stage');
+				},
+				tableLoad(val) {
+					this.stages = val;
+				}
+			}
+		});
+	</script>
+}
